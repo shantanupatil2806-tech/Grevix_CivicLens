@@ -17,20 +17,27 @@ export async function fetchIssues(filters?: Partial<IssueFilters>): Promise<{ is
   if (filters?.category) params.category = filters.category;
   if (filters?.status) params.status = filters.status;
   if (filters?.minSeverity) params.minSeverity = String(filters.minSeverity);
-  const { data } = await api.get<{ issues: Issue[]; isDatabase?: boolean }>('/issues', { params });
-  return data;
+  const { data } = await api.get<any>('/issues', { params });
+  // Backend now returns { issues: [...], isDatabase: true }; handle legacy raw array gracefully
+  const issues: Issue[] = Array.isArray(data) ? data : (data?.issues ?? []);
+  const isDatabase: boolean | undefined = Array.isArray(data) ? undefined : data?.isDatabase;
+  return { issues, isDatabase };
 }
 
 export async function fetchIssueById(id: string): Promise<Issue> {
-  const { data } = await api.get<{ issue: Issue }>(`/issues/${id}`);
-  return data.issue;
+  const { data } = await api.get<any>(`/issues/${id}`);
+  // Backend returns the issue object directly (not wrapped in { issue })
+  return (data && data._id) ? data : (data?.issue ?? data);
 }
 
 export async function createIssue(formData: FormData): Promise<CreateIssueResponse> {
-  const { data } = await api.post<CreateIssueResponse>('/issues', formData, {
+  const { data } = await api.post<any>('/issues', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
-  return data;
+  // Handle if backend returned the issue directly or wrapped in { issue }
+  const issue = (data && data._id) ? data : (data?.issue || data);
+  const analysis = data?.analysis || null;
+  return { issue, analysis };
 }
 
 export async function updateIssueStatus(id: string, status: string, note?: string): Promise<Issue> {

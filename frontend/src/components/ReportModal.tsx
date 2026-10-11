@@ -1,9 +1,12 @@
 // frontend/src/components/ReportModal.tsx
-import { useState, useRef, useEffect } from 'react';
-import type { Category, Issue, AnalysisResult } from '../types';
-import { createIssue, analyzeIssuePreview } from '../services/api';
-import { runFullClientAnalysis, getSeverityColor } from '../services/analysis';
-import { geocodeAddress, type GeocodeResult } from '../services/geocoding';
+import { useState, useRef, useEffect } from "react";
+import type { Category, Issue, AnalysisResult } from "../types";
+import { createIssue, analyzeIssuePreview } from "../services/api";
+import { runFullClientAnalysis, getSeverityColor } from "../services/analysis";
+import { geocodeAddress, type GeocodeResult } from "../services/geocoding";
+import { saveOfflineReport } from "../services/offlineDb";
+import { connectivity } from "../services/connectivity";
+import type { OfflineReport } from "../types";
 import {
   Sparkles,
   CheckCircle2,
@@ -17,10 +20,16 @@ import {
   ShieldAlert,
   ArrowRight,
   Crosshair,
-  AlertCircle
-} from 'lucide-react';
+  AlertCircle,
+} from "lucide-react";
 
-const CATEGORIES: Category[] = ['Roads', 'Garbage', 'Water', 'Electricity', 'Other'];
+const CATEGORIES: Category[] = [
+  "Roads",
+  "Garbage",
+  "Water",
+  "Electricity",
+  "Other",
+];
 
 interface Props {
   isOpen: boolean;
@@ -35,28 +44,33 @@ export default function ReportModal({
   onClose,
   existingIssues,
   onCreated,
-  initialCoords
+  initialCoords,
 }: Props) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<Category | ''>('');
-  const [location, setLocation] = useState('');
-  const [observedAt, setObservedAt] = useState('');
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<Category | "">("");
+  const [location, setLocation] = useState("");
+  const [observedAt, setObservedAt] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   // Geographic coordinates management
-  const [resolvedCoords, setResolvedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [resolvedCoords, setResolvedCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [isMapSelected, setIsMapSelected] = useState(false);
-  const [resolvedAddressName, setResolvedAddressName] = useState<string | null>(null);
+  const [resolvedAddressName, setResolvedAddressName] = useState<string | null>(
+    null,
+  );
   const [isGeocoding, setIsGeocoding] = useState(false);
 
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
+  const [success, setSuccess] = useState<"submitted" | "offline" | null>(null);
+  const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -66,8 +80,12 @@ export default function ReportModal({
     if (initialCoords && initialCoords.lat && initialCoords.lng) {
       setResolvedCoords(initialCoords);
       setIsMapSelected(true);
-      setLocation(`Pinned Location (${initialCoords.lat.toFixed(5)}, ${initialCoords.lng.toFixed(5)})`);
-      setResolvedAddressName(`Map Selected: ${initialCoords.lat.toFixed(5)}, ${initialCoords.lng.toFixed(5)}`);
+      setLocation(
+        `Pinned Location (${initialCoords.lat.toFixed(5)}, ${initialCoords.lng.toFixed(5)})`,
+      );
+      setResolvedAddressName(
+        `Map Selected: ${initialCoords.lat.toFixed(5)}, ${initialCoords.lng.toFixed(5)}`,
+      );
     } else {
       setResolvedCoords(null);
       setIsMapSelected(false);
@@ -122,11 +140,17 @@ export default function ReportModal({
           title,
           description,
           category,
-          location
+          location,
         });
         setAnalysis(serverResult);
       } catch {
-        const clientResult = runFullClientAnalysis(title, description, category, location, existingIssues);
+        const clientResult = runFullClientAnalysis(
+          title,
+          description,
+          category,
+          location,
+          existingIssues,
+        );
         setAnalysis(clientResult);
       } finally {
         setIsAnalyzing(false);
@@ -149,11 +173,16 @@ export default function ReportModal({
     }
   }
 
-  async function validateAndResolveLocation(): Promise<{ lat: number; lng: number } | null> {
+  async function validateAndResolveLocation(): Promise<{
+    lat: number;
+    lng: number;
+  } | null> {
     const errs: Record<string, string> = {};
-    if (!title.trim()) errs.title = 'Issue title is required.';
-    if (!description.trim()) errs.description = 'Detailed description is required.';
-    if (!location.trim()) errs.location = 'Specific location or pincode is required.';
+    if (!title.trim()) errs.title = "Issue title is required.";
+    if (!description.trim())
+      errs.description = "Detailed description is required.";
+    if (!location.trim())
+      errs.location = "Specific location or pincode is required.";
 
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
@@ -186,84 +215,137 @@ export default function ReportModal({
 
     // Location resolution failed: ask user to specify or select a map point instead of silently guessing
     setFieldErrors({
-      location: 'Could not resolve this address or pincode. Please enter a valid area/pincode (e.g. "411038 Pune") or click on the map to drop a pin.'
+      location:
+        'Could not resolve this address or pincode. Please enter a valid area/pincode (e.g. "411038 Pune") or click on the map to drop a pin.',
     });
     return null;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
+    setError("");
 
     const finalCoords = await validateAndResolveLocation();
     if (!finalCoords) return;
 
     setSubmitting(true);
-    const resolvedCategory = (category || analysis?.category || 'Other') as Category;
+    const resolvedCategory = (category ||
+      analysis?.category ||
+      "Other") as Category;
     const ticketId = `ANO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(100 + Math.random() * 900)}`;
+    const clientUuid =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `cid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    const locationType: "map-pinned" | "manual" | "geocoded" = isMapSelected
+      ? "map-pinned"
+      : resolvedAddressName
+        ? "geocoded"
+        : "manual";
+
+    const baseOfflineRecord: OfflineReport = {
+      clientId: clientUuid,
+      title: title.trim(),
+      description: description.trim(),
+      category: resolvedCategory,
+      location: location.trim(),
+      coordinates: finalCoords,
+      locationType,
+      photoBlob: imageFile || null,
+      photoName: imageFile ? imageFile.name : null,
+      photoPreview: imagePreview || null,
+      createdAt: observedAt
+        ? new Date(observedAt).toISOString()
+        : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      syncStatus: "Pending Sync",
+      retryCount: 0,
+      ticketCode: ticketId,
+    };
+
+    // If offline, save to IndexedDB directly (unsynced local storage)
+    if (!connectivity.isOnline()) {
+      try {
+        baseOfflineRecord.syncStatus = "Saved Offline";
+        await saveOfflineReport(baseOfflineRecord);
+
+        // Do NOT inject local unconfirmed issue into officer dashboard state.
+        // The officer dashboard reflects MongoDB/backend server reality.
+        // The unsynced report stays in IndexedDB until sync succeeds.
+        setSuccess("offline");
+        setTimeout(() => {
+          onClose();
+          setSuccess(null);
+        }, 900);
+        return;
+      } catch (err: any) {
+        setError("Failed to save offline: " + err.message);
+        setSubmitting(false);
+        return;
+      }
+    }
 
     try {
       const fd = new FormData();
-      fd.append('title', title.trim());
-      fd.append('description', description.trim());
-      fd.append('category', resolvedCategory);
-      fd.append('location', location.trim());
-      fd.append('ticketCode', ticketId);
-      fd.append('coordinates', JSON.stringify(finalCoords));
-      if (observedAt) fd.append('observedAt', observedAt);
-      if (imageFile) fd.append('image', imageFile);
+      fd.append("title", title.trim());
+      fd.append("description", description.trim());
+      fd.append("category", resolvedCategory);
+      fd.append("location", location.trim());
+      fd.append("ticketCode", ticketId);
+      fd.append("clientId", clientUuid);
+      fd.append("clientCreatedAt", baseOfflineRecord.createdAt);
+      if (finalCoords) {
+        fd.append("latitude", String(finalCoords.lat));
+        fd.append("longitude", String(finalCoords.lng));
+      }
+      if (observedAt) fd.append("observedAt", observedAt);
+      if (imageFile) fd.append("photo", imageFile);
 
       const result = await createIssue(fd);
       const enrichedIssue: Issue = {
         ...result.issue,
         coordinates: finalCoords,
-        ticketCode: result.issue.ticketCode || ticketId
-      };
-      onCreated(enrichedIssue);
-      setSuccess(true);
-      setTimeout(() => {
-        onClose();
-        setSuccess(false);
-      }, 900);
-    } catch {
-      // Fallback local demo creation preserving the exact resolved coordinates
-      const score = analysis?.severityScore || 65;
-      const localIssue: Issue = {
-        _id: `local-${Date.now()}`,
-        ticketCode: ticketId,
-        title: title.trim(),
-        description: description.trim(),
-        category: resolvedCategory,
-        location: location.trim(),
-        coordinates: finalCoords,
-        imagePath: imagePreview,
-        photos: imagePreview ? [imagePreview] : [],
-        severityScore: score,
-        priorityScore: score,
-        severityFactors: analysis?.severityFactors || [`Base category priority for ${resolvedCategory}: ${score} pts`],
-        categoryReasons: analysis?.categoryReasons || ['Citizen submission'],
-        status: 'Reported',
-        duplicateOf: analysis?.duplicate?.id || null,
-        duplicateReason: analysis?.duplicate?.reason || null,
-        statusHistory: [
-          {
-            status: 'Reported',
-            timestamp: new Date().toISOString(),
-            note: 'Reported with verified coordinates',
-            updatedBy: 'Citizen Reporter'
-          }
-        ],
-        createdAt: observedAt ? new Date(observedAt).toISOString() : new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        isDemo: true
+        ticketCode: result.issue.ticketCode || ticketId,
       };
 
-      onCreated(localIssue);
-      setSuccess(true);
+      // Successful online submission — do not buffer into offline queue
+
+      onCreated(enrichedIssue);
+      setSuccess("submitted");
       setTimeout(() => {
         onClose();
-        setSuccess(false);
+        setSuccess(null);
       }, 900);
+    } catch (apiErr: any) {
+      const status = apiErr.response?.status;
+      const isValidationError =
+        status >= 400 && status < 500 && status !== 408 && status !== 429;
+
+      if (isValidationError) {
+        setError(
+          apiErr.response?.data?.error ||
+            "Validation error: Please check fields.",
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      // Connectivity or server error: Fallback to persistent IndexedDB buffer
+      try {
+        baseOfflineRecord.syncStatus = "Pending Sync";
+        baseOfflineRecord.lastSyncError =
+          apiErr.response?.data?.error || apiErr.message || "Network timeout";
+        await saveOfflineReport(baseOfflineRecord);
+
+        setSuccess("offline");
+        setTimeout(() => {
+          onClose();
+          setSuccess(null);
+        }, 900);
+      } catch (err: any) {
+        setError("Error saving report: " + err.message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -275,8 +357,12 @@ export default function ReportModal({
         {/* Header */}
         <div className="sticky top-0 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 leading-snug">Report New Civic Issue</h2>
-            <p className="text-xs text-gray-400">Pinpoint problem on community map with real-time AI triage</p>
+            <h2 className="text-lg font-bold text-gray-900 leading-snug">
+              Report New Civic Issue
+            </h2>
+            <p className="text-xs text-gray-400">
+              Pinpoint problem on community map with real-time AI triage
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -299,10 +385,14 @@ export default function ReportModal({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Deep pothole on MG Road near Domino's"
                 className={`w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                  fieldErrors.title ? 'border-red-400' : 'border-gray-200'
+                  fieldErrors.title ? "border-red-400" : "border-gray-200"
                 }`}
               />
-              {fieldErrors.title && <p className="text-[11px] text-red-500 mt-0.5">{fieldErrors.title}</p>}
+              {fieldErrors.title && (
+                <p className="text-[11px] text-red-500 mt-0.5">
+                  {fieldErrors.title}
+                </p>
+              )}
             </div>
 
             <div>
@@ -315,22 +405,30 @@ export default function ReportModal({
                 rows={3}
                 placeholder="Describe the issue, road damage, risks, obstruction..."
                 className={`w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none ${
-                  fieldErrors.description ? 'border-red-400' : 'border-gray-200'
+                  fieldErrors.description ? "border-red-400" : "border-gray-200"
                 }`}
               />
-              {fieldErrors.description && <p className="text-[11px] text-red-500 mt-0.5">{fieldErrors.description}</p>}
+              {fieldErrors.description && (
+                <p className="text-[11px] text-red-500 mt-0.5">
+                  {fieldErrors.description}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Category</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Category
+                </label>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value as Category | '')}
+                  onChange={(e) => setCategory(e.target.value as Category | "")}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="">
-                    {analysis?.category ? `AI Suggests: ${analysis.category}` : 'Choose Category...'}
+                    {analysis?.category
+                      ? `AI Suggests: ${analysis.category}`
+                      : "Choose Category..."}
                   </option>
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -343,16 +441,21 @@ export default function ReportModal({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-gray-700">
-                    Location / Pincode / Area <span className="text-red-500">*</span>
+                    Location / Pincode / Area{" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   {isGeocoding && (
                     <span className="text-[10px] text-blue-600 flex items-center gap-1 font-medium">
-                      <Loader2 size={10} className="animate-spin" /> Geocoding...
+                      <Loader2 size={10} className="animate-spin" />{" "}
+                      Geocoding...
                     </span>
                   )}
                 </div>
                 <div className="relative">
-                  <MapPin size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <MapPin
+                    size={13}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
                   <input
                     value={location}
                     onChange={(e) => {
@@ -361,16 +464,28 @@ export default function ReportModal({
                     }}
                     placeholder="e.g. 411038 Pune or Kothrud, Pune"
                     className={`w-full pl-7 pr-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                      fieldErrors.location ? 'border-red-400 bg-red-50/20' : 'border-gray-200'
+                      fieldErrors.location
+                        ? "border-red-400 bg-red-50/20"
+                        : "border-gray-200"
                     }`}
                   />
                 </div>
                 {/* Visual feedback for coordinates */}
                 {resolvedCoords && (
                   <p className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5 mt-1 flex items-center gap-1">
-                    <Crosshair size={11} className="text-emerald-600 shrink-0" />
-                    <span className="font-mono">Coordinates: [{resolvedCoords.lat.toFixed(5)}, {resolvedCoords.lng.toFixed(5)}]</span>
-                    {resolvedAddressName && <span className="truncate max-w-[140px] text-emerald-800">({resolvedAddressName})</span>}
+                    <Crosshair
+                      size={11}
+                      className="text-emerald-600 shrink-0"
+                    />
+                    <span className="font-mono">
+                      Coordinates: [{resolvedCoords.lat.toFixed(5)},{" "}
+                      {resolvedCoords.lng.toFixed(5)}]
+                    </span>
+                    {resolvedAddressName && (
+                      <span className="truncate max-w-[140px] text-emerald-800">
+                        ({resolvedAddressName})
+                      </span>
+                    )}
                   </p>
                 )}
                 {fieldErrors.location && (
@@ -384,33 +499,47 @@ export default function ReportModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Observation Date</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Observation Date
+                </label>
                 <input
                   type="date"
                   value={observedAt}
-                  max={new Date().toISOString().split('T')[0]}
+                  max={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setObservedAt(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Photo Evidence</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Photo Evidence
+                </label>
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   className="w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   <Upload size={13} />
-                  <span>{imageFile ? 'Change Photo' : 'Upload Photo'}</span>
+                  <span>{imageFile ? "Change Photo" : "Upload Photo"}</span>
                 </button>
-                <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
               </div>
             </div>
 
             {imagePreview && (
               <div className="relative inline-block mt-2">
-                <img src={imagePreview} className="w-28 h-20 object-cover rounded-lg border border-gray-200 shadow-2xs" alt="Preview" />
+                <img
+                  src={imagePreview}
+                  className="w-28 h-20 object-cover rounded-lg border border-gray-200 shadow-2xs"
+                  alt="Preview"
+                />
                 <button
                   type="button"
                   onClick={() => {
@@ -425,9 +554,15 @@ export default function ReportModal({
             )}
 
             {success && (
-              <div className="flex items-center gap-2 p-2.5 bg-green-50 text-green-700 text-xs rounded-lg border border-green-200">
+              <div
+                className={`flex items-center gap-2 p-2.5 text-xs rounded-lg border ${success === "offline" ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-green-50 text-green-700 border-green-200"}`}
+              >
                 <CheckCircle2 size={15} />
-                <span>Ticket registered and placed on community map!</span>
+                <span>
+                  {success === "offline"
+                    ? "Saved locally; pending sync. Not yet on the officer issue map."
+                    : "Ticket registered and placed on community map!"}
+                </span>
               </div>
             )}
 
@@ -471,10 +606,16 @@ export default function ReportModal({
 
               {!analysis ? (
                 <div className="py-8 text-center text-gray-400 space-y-2">
-                  <FileText size={26} className="mx-auto opacity-30 text-blue-500" />
-                  <p className="text-xs font-medium text-gray-600">Type details to preview AI scoring</p>
+                  <FileText
+                    size={26}
+                    className="mx-auto opacity-30 text-blue-500"
+                  />
+                  <p className="text-xs font-medium text-gray-600">
+                    Type details to preview AI scoring
+                  </p>
                   <p className="text-[10px] text-gray-400">
-                    Live detection will automatically estimate category, severity score, and duplicate reports.
+                    Live detection will automatically estimate category,
+                    severity score, and duplicate reports.
                   </p>
                 </div>
               ) : (
@@ -485,7 +626,9 @@ export default function ReportModal({
                       Predicted Category
                     </span>
                     <div className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-gray-200 mt-1">
-                      <span className="text-xs font-bold text-gray-800">{analysis.category}</span>
+                      <span className="text-xs font-bold text-gray-800">
+                        {analysis.category}
+                      </span>
                       <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-1.5 py-0.2 rounded">
                         {analysis.confidence}% Confidence
                       </span>
@@ -500,7 +643,7 @@ export default function ReportModal({
                       </span>
                       <span
                         className={`text-[10px] font-extrabold px-2 py-0.2 rounded-full border ${getSeverityColor(
-                          analysis.severityScore
+                          analysis.severityScore,
                         )}`}
                       >
                         {analysis.severityLabel} ({analysis.severityScore}/100)
@@ -512,15 +655,16 @@ export default function ReportModal({
                         style={{ width: `${analysis.severityScore}%` }}
                       />
                     </div>
-                    {analysis.severityFactors && analysis.severityFactors.length > 0 && (
-                      <div className="mt-2 space-y-1 bg-white p-2.5 rounded-lg border border-gray-200">
-                        {analysis.severityFactors.slice(0, 3).map((f, i) => (
-                          <p key={i} className="text-[10px] text-gray-600">
-                            • {f}
-                          </p>
-                        ))}
-                      </div>
-                    )}
+                    {analysis.severityFactors &&
+                      analysis.severityFactors.length > 0 && (
+                        <div className="mt-2 space-y-1 bg-white p-2.5 rounded-lg border border-gray-200">
+                          {analysis.severityFactors.slice(0, 3).map((f, i) => (
+                            <p key={i} className="text-[10px] text-gray-600">
+                              • {f}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                   </div>
 
                   {/* Duplicate warning */}
@@ -528,9 +672,13 @@ export default function ReportModal({
                     <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1">
                       <div className="flex items-center gap-1 font-bold text-amber-800 text-[11px]">
                         <ShieldAlert size={13} />
-                        <span>Potential Duplicate ({analysis.duplicate.similarity}%)</span>
+                        <span>
+                          Potential Duplicate ({analysis.duplicate.similarity}%)
+                        </span>
                       </div>
-                      <p className="text-[11px] truncate">"{analysis.duplicate.title}"</p>
+                      <p className="text-[11px] truncate">
+                        "{analysis.duplicate.title}"
+                      </p>
                     </div>
                   )}
                 </div>

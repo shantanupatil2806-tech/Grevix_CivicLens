@@ -1,26 +1,41 @@
 // frontend/src/App.tsx
-import { useState, useEffect } from 'react';
-import TopHeader from './components/TopHeader';
-import FilterBar from './components/FilterBar';
-import CivicMap from './components/CivicMap';
-import IssueDetailSidePanel from './components/IssueDetailSidePanel';
-import IssueTable from './components/IssueTable';
-import ReportModal from './components/ReportModal';
-import CitizenPortal from './components/CitizenPortal';
-import type { Issue, IssueFilters } from './types';
-import { sampleIssues } from './data/sampleIssues';
-import { fetchIssues } from './services/api';
+import { useState, useEffect } from "react";
+import TopHeader from "./components/TopHeader";
+import FilterBar from "./components/FilterBar";
+import CivicMap from "./components/CivicMap";
+import IssueDetailSidePanel from "./components/IssueDetailSidePanel";
+import IssueTable from "./components/IssueTable";
+import ReportModal from "./components/ReportModal";
+import CitizenPortal from "./components/CitizenPortal";
+import OfflineReportQueue from "./components/OfflineReportQueue";
+import type { Issue, IssueFilters } from "./types";
+import { sampleIssues } from "./data/sampleIssues";
+import { fetchIssues } from "./services/api";
+import { connectivity } from "./services/connectivity";
 
-const DEFAULT_FILTERS: IssueFilters = { search: '', category: '', status: '', minSeverity: 0 };
+const DEFAULT_FILTERS: IssueFilters = {
+  search: "",
+  category: "",
+  status: "",
+  minSeverity: 0,
+};
 
 export default function App() {
   const [issues, setIssues] = useState<Issue[]>(sampleIssues);
   const [filters, setFilters] = useState<IssueFilters>(DEFAULT_FILTERS);
-  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(sampleIssues[0]); // Select first issue by default like in reference
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(
+    sampleIssues[0],
+  ); // Select first issue by default like in reference
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [viewMode, setViewMode] = useState<'map' | 'table'>('map');
-  const [portalMode, setPortalMode] = useState<'citizen' | 'officer'>('citizen');
+  const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
+  const [clickedCoords, setClickedCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [viewMode, setViewMode] = useState<"map" | "table">("map");
+  const [portalMode, setPortalMode] = useState<"citizen" | "officer">(
+    "citizen",
+  );
 
   const [loading, setLoading] = useState(false);
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
@@ -28,22 +43,28 @@ export default function App() {
 
   // Load issues from backend
   useEffect(() => {
+    let isActive = true;
+
     async function loadIssues() {
       setLoading(true);
       try {
         const response = await fetchIssues();
+        if (!isActive) return;
         if (response.issues && response.issues.length > 0) {
           // If we have actual issues in MongoDB, map them preserving exact stored coordinates
           const dbIssues = response.issues.map((iss, idx) => ({
             ...iss,
-            ticketCode: iss.ticketCode || `DB-${3400 + idx}-${iss._id.slice(-4).toUpperCase()}`,
-            coordinates: iss.coordinates && typeof iss.coordinates.lat === 'number' && typeof iss.coordinates.lng === 'number'
-              ? iss.coordinates
-              : {
-                  lat: 18.5204 + (Math.random() - 0.5) * 0.03,
-                  lng: 73.8567 + (Math.random() - 0.5) * 0.03
-                },
-            isDemo: false
+            ticketCode:
+              iss.ticketCode ||
+              `DB-${3400 + idx}-${iss._id.slice(-4).toUpperCase()}`,
+            // Only preserve real coordinates; do NOT fabricate random fallback positions
+            coordinates:
+              iss.coordinates &&
+              typeof iss.coordinates.lat === "number" &&
+              typeof iss.coordinates.lng === "number"
+                ? iss.coordinates
+                : undefined,
+            isDemo: false,
           }));
           setIssues(dbIssues);
           setSelectedIssue(dbIssues[0]);
@@ -55,15 +76,30 @@ export default function App() {
         }
         setBackendUp(true);
       } catch {
+        if (!isActive) return;
         setBackendUp(false);
         setIssues(sampleIssues);
         setSelectedIssue(sampleIssues[0]);
         setHasRealDbData(false);
       } finally {
-        setLoading(false);
+        if (isActive) setLoading(false);
       }
     }
-    loadIssues();
+
+    void loadIssues();
+    let skipInitialConnectivityStatus = true;
+    const unsubscribe = connectivity.subscribe((isOnline) => {
+      if (skipInitialConnectivityStatus) {
+        skipInitialConnectivityStatus = false;
+        return;
+      }
+      if (isOnline) void loadIssues();
+    });
+
+    return () => {
+      isActive = false;
+      unsubscribe();
+    };
   }, []);
 
   function handleIssueCreated(newIssue: Issue) {
@@ -103,15 +139,17 @@ export default function App() {
 
   // Summary Metrics
   const total = issues.length;
-  const inProgress = issues.filter((i) => i.status === 'In Progress').length;
-  const critical = issues.filter((i) => i.severityScore >= 80 && i.status !== 'Resolved').length;
-  const resolved = issues.filter((i) => i.status === 'Resolved').length;
+  const inProgress = issues.filter((i) => i.status === "In Progress").length;
+  const critical = issues.filter(
+    (i) => i.severityScore >= 80 && i.status !== "Resolved",
+  ).length;
+  const resolved = issues.filter((i) => i.status === "Resolved").length;
 
   // If citizen portal mode is active, render CitizenPortal
-  if (portalMode === 'citizen') {
+  if (portalMode === "citizen") {
     return (
       <CitizenPortal
-        onSwitchToDashboard={() => setPortalMode('officer')}
+        onSwitchToDashboard={() => setPortalMode("officer")}
         onIssueCreated={handleIssueCreated}
         existingIssues={issues}
       />
@@ -128,7 +166,8 @@ export default function App() {
           setClickedCoords(null);
           setIsReportModalOpen(true);
         }}
-        onSwitchToCitizenPortal={() => setPortalMode('citizen')}
+        onSwitchToCitizenPortal={() => setPortalMode("citizen")}
+        onOpenQueue={() => setIsQueueModalOpen(true)}
         backendUp={backendUp}
         hasRealDbData={hasRealDbData}
         totalIssuesCount={total}
@@ -155,7 +194,7 @@ export default function App() {
 
         {/* Center / Right Stage: Full Screen Map or Alternate Table List */}
         <div className="flex-1 relative h-full flex flex-col overflow-hidden">
-          {viewMode === 'map' ? (
+          {viewMode === "map" ? (
             <CivicMap
               issues={filteredIssues}
               selectedIssue={selectedIssue}
@@ -179,7 +218,7 @@ export default function App() {
                   onFiltersChange={setFilters}
                   onSelect={(iss) => {
                     setSelectedIssue(iss);
-                    setViewMode('map');
+                    setViewMode("map");
                   }}
                   showFilters={false}
                 />
@@ -218,6 +257,18 @@ export default function App() {
         onCreated={handleIssueCreated}
         initialCoords={clickedCoords}
       />
+
+      {/* 5. Offline Queue Modal (inspectable in Officer Command Center as well) */}
+      {isQueueModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto my-auto animate-fadeIn">
+            <OfflineReportQueue
+              onIssueSynced={handleIssueCreated}
+              onClose={() => setIsQueueModalOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

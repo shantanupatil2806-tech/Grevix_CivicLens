@@ -1,10 +1,14 @@
-// frontend/src/components/CitizenPortal.tsx
 import { useState, useRef, useEffect } from 'react';
-import type { Issue, Category, AnalysisResult } from '../types';
+import type { Issue, Category, AnalysisResult, OfflineReport } from '../types';
 import { StatusBadge, CategoryBadge } from './Badges';
 import { createIssue, analyzeIssuePreview, fetchIssueById, fetchIssues } from '../services/api';
 import { geocodeAddress } from '../services/geocoding';
 import { runFullClientAnalysis } from '../services/analysis';
+import { saveOfflineReport } from '../services/offlineDb';
+import { connectivity } from '../services/connectivity';
+import { syncEngine } from '../services/syncEngine';
+import OfflineReportQueue from './OfflineReportQueue';
+import ConnectivityIndicator from './ConnectivityIndicator';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
@@ -21,7 +25,9 @@ import {
   AlertTriangle,
   Check,
   Building2,
-  Lock
+  Lock,
+  Layers,
+  WifiOff
 } from 'lucide-react';
 
 interface Props {
@@ -30,7 +36,7 @@ interface Props {
   existingIssues: Issue[];
 }
 
-type CitizenTab = 'home' | 'report' | 'track';
+type CitizenTab = 'home' | 'report' | 'track' | 'queue';
 
 const CATEGORIES: Category[] = ['Roads', 'Garbage', 'Water', 'Electricity', 'Other'];
 
@@ -99,6 +105,7 @@ export default function CitizenPortal({
   // Submission & Confirmation State
   const [submitting, setSubmitting] = useState(false);
   const [confirmedIssue, setConfirmedIssue] = useState<Issue | null>(null);
+  const [offlineSavedReport, setOfflineSavedReport] = useState<OfflineReport | null>(null);
   const [formError, setFormError] = useState('');
 
   // Tracking Search State
@@ -203,7 +210,52 @@ export default function CitizenPortal({
     setSubmitting(true);
     const resolvedCat = (category || analysis?.category || 'Other') as Category;
     const ticketId = `ANO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(100 + Math.random() * 900)}`;
+    const clientUuid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+    const coordsToSave = hasMapPin ? selectedCoords : null;
+    const locationType: 'map-pinned' | 'manual' | 'geocoded' = hasMapPin
+      ? 'map-pinned'
+      : geocodingMsg
+      ? 'geocoded'
+      : 'manual';
+
+    const baseOfflineRecord: OfflineReport = {
+      clientId: clientUuid,
+      title: title.trim(),
+      description: description.trim(),
+      category: resolvedCat,
+      location: location.trim(),
+      coordinates: coordsToSave,
+      locationType,
+      photoBlob: imageFile || null,
+      photoName: imageFile ? imageFile.name : null,
+      photoPreview: imagePreview || null,
+      reporterName: reporterName.trim() || undefined,
+      reporterContact: reporterContact.trim() || undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'Pending Sync',
+      retryCount: 0,
+      ticketCode: ticketId
+    };
+
+    // If connectivity check fails immediately, persist to IndexedDB directly
+    const isBackendReachable = connectivity.isOnline();
+    if (!isBackendReachable) {
+      try {
+        baseOfflineRecord.syncStatus = 'Saved Offline';
+        const saved = await saveOfflineReport(baseOfflineRecord);
+        setOfflineSavedReport(saved);
+        setSubmitting(false);
+        return;
+      } catch (dbErr: any) {
+        setFormError('Failed to save report locally: ' + (dbErr.message || 'IndexedDB error'));
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // Try submitting online with clientId
     try {
       const fd = new FormData();
       fd.append('title', title.trim());
@@ -211,51 +263,50 @@ export default function CitizenPortal({
       fd.append('category', resolvedCat);
       fd.append('location', location.trim());
       fd.append('ticketCode', ticketId);
-      fd.append('coordinates', JSON.stringify(selectedCoords));
-      if (imageFile) fd.append('image', imageFile);
+      fd.append('clientId', clientUuid);
+      fd.append('clientCreatedAt', baseOfflineRecord.createdAt);
+
+      if (coordsToSave) {
+        fd.append('latitude', String(coordsToSave.lat));
+        fd.append('longitude', String(coordsToSave.lng));
+      }
+      if (reporterName.trim()) fd.append('reporterName', reporterName.trim());
+      if (reporterContact.trim()) fd.append('reporterContact', reporterContact.trim());
+      if (imageFile) fd.append('photo', imageFile);
 
       const res = await createIssue(fd);
       const newIssue: Issue = {
         ...res.issue,
-        coordinates: selectedCoords,
+        coordinates: coordsToSave || undefined,
         ticketCode: res.issue.ticketCode || ticketId
       };
 
+      // Online submission succeeded — do NOT write to the offline queue.
+      // The queue is exclusively for reports that were saved locally while
+      // offline or when the server was unreachable.
       onIssueCreated(newIssue);
       setConfirmedIssue(newIssue);
-    } catch {
-      // Local fallback issue
-      const score = analysis?.severityScore || 65;
-      const localIssue: Issue = {
-        _id: `local-${Date.now()}`,
-        ticketCode: ticketId,
-        title: title.trim(),
-        description: description.trim(),
-        category: resolvedCat,
-        location: location.trim(),
-        coordinates: selectedCoords,
-        imagePath: imagePreview,
-        photos: imagePreview ? [imagePreview] : [],
-        severityScore: score,
-        priorityScore: score,
-        severityFactors: analysis?.severityFactors || [`Base category score: ${score} pts`],
-        categoryReasons: analysis?.categoryReasons || ['Citizen portal submission'],
-        status: 'Reported',
-        statusHistory: [
-          {
-            status: 'Reported',
-            timestamp: new Date().toISOString(),
-            note: 'Ticket filed via Citizen Portal',
-            updatedBy: 'Citizen Reporter'
-          }
-        ],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        isDemo: true
-      };
+    } catch (apiErr: any) {
+      const status = apiErr.response?.status;
+      const isValidationError = status >= 400 && status < 500 && status !== 408 && status !== 429;
 
-      onIssueCreated(localIssue);
-      setConfirmedIssue(localIssue);
+      if (isValidationError) {
+        // Do not silently treat validation errors as connectivity failures
+        const errDetail = apiErr.response?.data?.error || 'Validation error: Please review submitted fields.';
+        setFormError(errDetail);
+        setSubmitting(false);
+        return;
+      }
+
+      // Connectivity or server error: Fallback to persistent IndexedDB buffer
+      try {
+        baseOfflineRecord.syncStatus = 'Pending Sync';
+        baseOfflineRecord.lastSyncError = apiErr.response?.data?.error || apiErr.message || 'Network timeout';
+        const saved = await saveOfflineReport(baseOfflineRecord);
+        setOfflineSavedReport(saved);
+      } catch (dbErr: any) {
+        setFormError('Network failed and local save failed: ' + dbErr.message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -271,6 +322,7 @@ export default function CitizenPortal({
     setImageFile(null);
     setImagePreview(null);
     setConfirmedIssue(null);
+    setOfflineSavedReport(null);
     setFormError('');
     setAnalysis(null);
     setHasMapPin(false);
@@ -389,7 +441,21 @@ export default function CitizenPortal({
               <span>Track Status</span>
             </button>
 
+            <button
+              onClick={() => setActiveTab('queue')}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'queue'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <Layers size={16} />
+              <span>My Reports</span>
+            </button>
+
             <div className="h-5 w-px bg-gray-200 mx-1 sm:mx-2" />
+
+            <ConnectivityIndicator onOpenQueue={() => setActiveTab('queue')} />
 
             {/* Switch to Officer Dashboard */}
             <button
@@ -617,6 +683,75 @@ export default function CitizenPortal({
                   >
                     <ShieldAlert size={14} />
                     <span>View in Officer Dashboard</span>
+                  </button>
+                </div>
+              </div>
+            ) : offlineSavedReport ? (
+              /* Offline Saved Confirmation Screen */
+              <div className="max-w-2xl mx-auto bg-white rounded-3xl border border-amber-200 shadow-lg p-8 sm:p-10 text-center animate-fadeIn">
+                <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-5 shadow-sm">
+                  <WifiOff size={36} />
+                </div>
+
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-300">
+                  Report Saved Locally (Offline Buffer)
+                </span>
+
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mt-4">
+                  Report Saved on This Device
+                </h2>
+                <p className="text-sm text-gray-600 mt-2 max-w-md mx-auto">
+                  Report saved on this device. <strong>It has not reached CivicLens yet.</strong> It will synchronize automatically as soon as internet connection is restored.
+                </p>
+
+                {/* Local Tracking Box */}
+                <div className="my-8 p-6 bg-amber-50/60 border-2 border-dashed border-amber-300 rounded-2xl text-center">
+                  <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">
+                    Temporary Client Tracking Code
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-mono font-black text-amber-900 tracking-wide">
+                    {offlineSavedReport.ticketCode || offlineSavedReport.clientId.slice(0, 8)}
+                  </p>
+                  <p className="text-xs text-amber-700 mt-2">
+                    Client Idempotency UUID: <span className="font-mono">{offlineSavedReport.clientId}</span>
+                  </p>
+                </div>
+
+                {/* Summary Details */}
+                <div className="text-left bg-gray-50 rounded-xl p-4 sm:p-5 border border-gray-200 text-xs space-y-2 mb-8">
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="text-gray-500">Issue Title:</span>
+                    <span className="font-semibold text-gray-900">{offlineSavedReport.title}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="text-gray-500">Category:</span>
+                    <CategoryBadge category={offlineSavedReport.category} />
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="text-gray-500">Location:</span>
+                    <span className="font-semibold text-gray-900 truncate max-w-[240px]">{offlineSavedReport.location}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-gray-500">Status:</span>
+                    <span className="font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{offlineSavedReport.syncStatus}</span>
+                  </div>
+                </div>
+
+                {/* Next Steps Buttons */}
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={() => setActiveTab('queue')}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Layers size={14} />
+                    <span>View Offline Queue</span>
+                  </button>
+
+                  <button
+                    onClick={handleResetForm}
+                    className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition-all border border-gray-300 cursor-pointer"
+                  >
+                    Report Another Issue
                   </button>
                 </div>
               </div>
@@ -1030,6 +1165,17 @@ export default function CitizenPortal({
               </div>
             )}
           </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 4: OFFLINE REPORT BUFFER QUEUE (MY REPORTS)           */}
+        {/* ========================================================= */}
+        {activeTab === 'queue' && (
+          <OfflineReportQueue
+            onIssueSynced={(issue) => {
+              onIssueCreated(issue);
+            }}
+          />
         )}
       </main>
 

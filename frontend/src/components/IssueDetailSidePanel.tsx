@@ -48,14 +48,12 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
     ? issue.severityFactors
     : dynamicSeverity.factors;
 
-  const photosList = issue.photos && issue.photos.length > 0
-    ? issue.photos
+  // Only show photos that were actually submitted — never fabricate evidence with stock images
+  const photosList: string[] = issue.photos && issue.photos.length > 0
+    ? issue.photos.filter(Boolean)
     : issue.imagePath
     ? [issue.imagePath]
-    : [
-        'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=500&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1584463699042-3a5f259b3fae?w=500&auto=format&fit=crop&q=80'
-      ];
+    : [];
 
   async function handleAddCommentOrStatus(newStatus?: Status) {
     const targetStatus = newStatus || issue.status;
@@ -237,31 +235,43 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
           </p>
         </div>
 
-        {/* Photos Grid matching Reference */}
+        {/* Photos Grid — only real uploaded photos, no stock/demo fallback */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
               <ImageIcon size={14} className="text-blue-600" />
               <span>Photos ({photosList.length})</span>
             </h4>
-            <span className="text-[11px] text-gray-400">Click photo to zoom</span>
+            {photosList.length > 0 && (
+              <span className="text-[11px] text-gray-400">Click photo to zoom</span>
+            )}
           </div>
 
-          <div className="grid grid-cols-3 gap-2.5">
-            {photosList.map((photoUrl, idx) => (
-              <div
-                key={idx}
-                onClick={() => setActivePhoto(photoUrl)}
-                className="group relative h-20 rounded-xl overflow-hidden border border-gray-200 bg-gray-100 cursor-pointer shadow-2xs hover:shadow-md transition-all"
-              >
-                <img
-                  src={photoUrl}
-                  alt={`Evidence photo ${idx + 1}`}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-              </div>
-            ))}
-          </div>
+          {photosList.length === 0 ? (
+            <div className="flex items-center justify-center h-16 rounded-xl border border-dashed border-gray-200 bg-gray-50 text-gray-400 text-xs gap-2">
+              <ImageIcon size={14} />
+              <span>No photos attached to this report</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2.5">
+              {photosList.map((photoUrl, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => setActivePhoto(photoUrl)}
+                  className="group relative h-20 rounded-xl overflow-hidden border border-gray-200 bg-gray-100 cursor-pointer shadow-2xs hover:shadow-md transition-all"
+                >
+                  <img
+                    src={photoUrl}
+                    alt={`Evidence photo ${idx + 1}`}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Zoomed Photo Modal */}

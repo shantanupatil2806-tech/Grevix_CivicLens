@@ -1,4 +1,4 @@
-﻿// backend/src/controllers/issueController.js
+// backend/src/controllers/issueController.js
 const mongoose = require('mongoose');
 const Issue = require('../models/Issue');
 const multer = require('multer');
@@ -11,7 +11,7 @@ const {
   detectDuplicatesWithReasons
 } = require('../utils/analysis');
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../../../uploads');
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -48,22 +48,56 @@ function buildPhotoUrl(req, filename) {
 
 exports.createIssue = async (req, res, next) => {
   try {
-    const { title, description, category: rawCategory, location, latitude, longitude, severity, reporterName, reporterContact } = req.body;
+    const { title, description, category: rawCategory, location, latitude, longitude, severity, reporterName, reporterContact, clientId, clientCreatedAt, ticketCode } = req.body;
     if (!title || !description || !location) return res.status(400).json({ error: 'title, description and location are required.' });
+
+    // Idempotency: if clientId provided, check for existing issue
+    if (clientId) {
+      const existing = await Issue.findOne({ clientId });
+      if (existing) {
+        // Return the existing issue — prevents duplicates on retry
+        return res.status(200).json(sanitizeIssue(existing, req));
+      }
+    }
+
     const category = normalizeCategory(rawCategory || 'Other');
     const issueData = {
       title: title.trim(), description: description.trim(), category,
       location: location.trim(), severity: severity || 'Medium', status: 'Reported',
       reporter: { name: reporterName ? reporterName.trim() : 'Anonymous', contact: reporterContact ? reporterContact.trim() : '' }
     };
+
+    // Offline sync metadata
+    if (clientId) issueData.clientId = clientId;
+    issueData.serverReceivedAt = new Date();
+    if (clientCreatedAt) issueData.clientCreatedAt = new Date(clientCreatedAt);
+    if (ticketCode && ticketCode.trim()) issueData.ticketCode = ticketCode.trim();
+
     const lat = parseFloat(latitude); const lon = parseFloat(longitude);
-    if (!isNaN(lat) && !isNaN(lon)) { issueData.latitude = lat; issueData.longitude = lon; }
-    if (req.file) { issueData.photo = req.file.filename; issueData.photoUrl = buildPhotoUrl(req, req.file.filename); }
+    if (!isNaN(lat) && !isNaN(lon)) { issueData.coordinates = { lat, lng: lon }; }
+    if (req.file) {
+      const fullUrl = buildPhotoUrl(req, req.file.filename);
+      issueData.photo = req.file.filename;
+      issueData.photoUrl = fullUrl;
+      issueData.imagePath = fullUrl;
+      issueData.photos = [fullUrl];
+    }
     const { score, label, factors } = computeSeverityDetails(issueData);
     issueData.priorityScore = score; issueData.severity = label; issueData.analysisFactors = factors;
     const issue = new Issue(issueData);
     issue.statusHistory.push({ status: 'Reported', note: 'Issue submitted by citizen' });
-    await issue.save();
+
+    try {
+      await issue.save();
+    } catch (saveErr) {
+      // Handle race condition: duplicate clientId from concurrent requests
+      if (saveErr.code === 11000 && clientId) {
+        const existing = await Issue.findOne({ clientId });
+        if (existing) return res.status(200).json(sanitizeIssue(existing, req));
+      }
+      throw saveErr;
+    }
+
     res.status(201).json(sanitizeIssue(issue, req));
   } catch (err) { next(err); }
 };
@@ -78,14 +112,15 @@ exports.getIssues = async (req, res, next) => {
     if (search) filter['$or'] = [
       { title: { '$regex': search, '$options': 'i' } },
       { description: { '$regex': search, '$options': 'i' } },
-      { location: { '$regex': search, '$options': 'i' } }
+      { location: { '$regex': search, '$options': 'i' } },
+      { ticketCode: { '$regex': search, '$options': 'i' } }
     ];
     const issues = await Issue.find(filter).sort({ createdAt: -1 }).limit(parseInt(limit)).lean();
     const sanitized = issues.map(issue => {
       if (!isOfficer(req)) { delete issue.reporter; delete issue.internalInstructions; }
       return issue;
     });
-    res.json(sanitized);
+    res.json({ issues: sanitized, isDatabase: true });
   } catch (err) { next(err); }
 };
 

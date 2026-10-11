@@ -1,4 +1,3 @@
-// frontend/src/components/TopHeader.tsx
 import {
   MapPin,
   Bell,
@@ -11,12 +10,14 @@ import {
   Search,
   Sparkles
 } from 'lucide-react';
+import ConnectivityIndicator from './ConnectivityIndicator';
 
 interface Props {
   viewMode: 'map' | 'table';
   onToggleViewMode: (mode: 'map' | 'table') => void;
   onOpenNewTicketModal: () => void;
   onSwitchToCitizenPortal?: () => void;
+  onOpenQueue?: () => void;
   backendUp: boolean | null;
   hasRealDbData: boolean;
   totalIssuesCount: number;
@@ -27,6 +28,7 @@ export default function TopHeader({
   onToggleViewMode,
   onOpenNewTicketModal,
   onSwitchToCitizenPortal,
+  onOpenQueue,
   backendUp,
   hasRealDbData,
   totalIssuesCount
@@ -50,8 +52,10 @@ export default function TopHeader({
         </div>
       </div>
 
-      {/* Center Search / Status Pill */}
+      {/* Center Search / Status Pill & Connectivity Indicator */}
       <div className="hidden md:flex items-center gap-3">
+        <ConnectivityIndicator onOpenQueue={onOpenQueue} />
+
         {backendUp && hasRealDbData ? (
           <div className="flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1 rounded-full">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

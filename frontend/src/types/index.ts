@@ -55,3 +55,34 @@ export interface IssueFilters {
   status: Status | '';
   minSeverity: number;
 }
+
+export type SyncStatus =
+  | 'Saved Offline'
+  | 'Pending Sync'
+  | 'Syncing'
+  | 'Synced'
+  | 'Needs Attention';
+
+export interface OfflineReport {
+  clientId: string; // client-generated UUID idempotency key
+  title: string;
+  description: string;
+  category: Category;
+  location: string;
+  coordinates?: { lat: number; lng: number } | null;
+  locationType: 'map-pinned' | 'manual' | 'geocoded';
+  photoBlob?: Blob | null;
+  photoName?: string | null;
+  photoPreview?: string | null; // Data URL or Object URL for display
+  reporterName?: string;
+  reporterContact?: string;
+  createdAt: string; // ISO string
+  updatedAt: string; // ISO string
+  syncStatus: SyncStatus;
+  retryCount: number;
+  lastSyncError?: string | null;
+  serverIssueId?: string | null; // populated once synced
+  ticketCode?: string;
+  needsStaleReview?: boolean; // if report is > 24 hours old before syncing
+}
+

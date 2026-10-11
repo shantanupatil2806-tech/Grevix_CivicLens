@@ -111,11 +111,20 @@ const IssueSchema = new mongoose.Schema({
   duplicateOf: { type: mongoose.Schema.Types.ObjectId, ref: 'Issue', default: null },
   duplicateReason: { type: String, default: null },
   statusHistory: [StatusHistorySchema],
+
+  // Offline sync support
+  clientId: { type: String, default: null },          // Client-generated UUID for idempotency
+  serverReceivedAt: { type: Date, default: null },    // When server first received this report
+  clientCreatedAt: { type: Date, default: null },     // Original creation time from client device
+
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
 
-IssueSchema.pre('save', function (next) {
+// Unique sparse index: allows null clientId (existing online reports) but prevents duplicate syncs
+IssueSchema.index({ clientId: 1 }, { unique: true, sparse: true });
+
+IssueSchema.pre('save', function () {
   this.updatedAt = Date.now();
   if (this.isModified('status')) {
     if (!this.statusHistory) this.statusHistory = [];
@@ -129,7 +138,6 @@ IssueSchema.pre('save', function (next) {
       });
     }
   }
-  next();
 });
 
 module.exports = mongoose.model('Issue', IssueSchema);
