@@ -19,7 +19,6 @@ Health**](https://civiclens-backend-ucyz.onrender.com/health)
 :::
 
 ------------------------------------------------------------------------
-
 ## 📌 Overview
 
 CivicLens is a full-stack civic technology application built to make
@@ -34,7 +33,6 @@ connection?** CivicLens supports offline report storage and
 synchronization when connectivity returns.
 
 ## ✨ What You Can Do
-
   -----------------------------------------------------------------------
   Feature                             What it does
   ----------------------------------- -----------------------------------
