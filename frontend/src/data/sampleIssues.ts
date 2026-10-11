@@ -14,7 +14,7 @@ export const sampleIssues: Issue[] = [
     priorityScore: 85,
     photos: [
       'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=500&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1584463699042-3a5f259b3fae?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=500&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=500&auto=format&fit=crop&q=80'
     ],
     severityFactors: [
@@ -99,7 +99,7 @@ export const sampleIssues: Issue[] = [
     severityScore: 90,
     priorityScore: 90,
     photos: [
-      'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f7?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1530587191325-3db32d826c18?w=500&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=500&auto=format&fit=crop&q=80'
     ],
     severityFactors: [
@@ -209,7 +209,7 @@ export const sampleIssues: Issue[] = [
     severityScore: 75,
     priorityScore: 75,
     photos: [
-      'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f7?w=500&auto=format&fit=crop&q=80'
+      'https://images.unsplash.com/photo-1530587191325-3db32d826c18?w=500&auto=format&fit=crop&q=80'
     ],
     severityFactors: [
       'Base category priority for Water: 45 pts',

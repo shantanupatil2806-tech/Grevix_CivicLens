@@ -127,6 +127,15 @@ function computeSeverityDetails(issue) {
     }
   }
 
+  // Community Impact Factor: +1 per upvote ("Me Too"), capped at +15 max
+  // Ensures popular/viral issues can never overshadow primary life-safety hazards
+  const upvotes = parseInt(issue.upvoteCount) || (Array.isArray(issue.upvotedByCitizens) ? issue.upvotedByCitizens.length : 0);
+  if (upvotes > 0) {
+    const cappedBoost = Math.min(upvotes, 15);
+    score += cappedBoost;
+    factors.push(`Community endorsement impact (+${cappedBoost} pts from ${upvotes} citizen report confirmation${upvotes > 1 ? 's' : ''}, max 15)`);
+  }
+
   score = Math.min(Math.max(score, 10), 100);
 
   let label = 'Low';

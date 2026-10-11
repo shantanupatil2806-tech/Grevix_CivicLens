@@ -1,4 +1,4 @@
-﻿// backend/src/routes/issueRoutes.js
+// backend/src/routes/issueRoutes.js
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/issueController');
@@ -23,6 +23,11 @@ router.post('/:id/verify-resolve', authenticateToken, requireRole(['officer']), 
 router.post('/:id/reopen', authenticateToken, requireRole(['officer']), ctrl.reopenIssue);
 
 // Worker (or officer) actions
-router.post('/:id/worker-update', authenticateToken, requireRole(['worker', 'officer']), ctrl.workerUpdateTask);
+router.post('/:id/worker-update', authenticateToken, requireRole(['worker', 'officer']), ctrl.uploadMiddleware, ctrl.workerUpdateTask);
+router.post('/:id/worker-evidence', authenticateToken, requireRole(['worker', 'officer']), ctrl.uploadMiddleware, ctrl.uploadWorkerEvidence);
+
+// Citizen closed-loop community actions
+router.post('/:id/upvote', optionalAuth, ctrl.toggleUpvote);
+router.post('/:id/verify-citizen', optionalAuth, ctrl.uploadMiddleware, ctrl.verifyCitizenFeedback);
 
 module.exports = router;

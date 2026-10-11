@@ -6,11 +6,12 @@ const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ['citizen', 'officer', 'worker'], required: true, default: 'citizen' },
+  role: { type: String, enum: ['citizen', 'officer', 'worker', 'admin'], required: true, default: 'citizen' },
   department: { type: String, default: 'General' },
   phone: { type: String, default: '' },
   avatarUrl: { type: String, default: '' },
   active: { type: Boolean, default: true },
+  mustChangePassword: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -28,8 +29,24 @@ async function seedDefaultUsers() {
       return;
     }
 
+    // Ensure Admin user always exists
+    const adminExists = await User.findOne({ role: 'admin' });
+    if (!adminExists) {
+      const adminHash = await bcrypt.hash('admin123', 10);
+      await User.create({
+        name: 'Municipal Admin',
+        email: 'admin@civiclens.gov',
+        passwordHash: adminHash,
+        role: 'admin',
+        department: 'Civic Administration',
+        phone: '+91 99999 00000',
+        mustChangePassword: false
+      });
+      console.log('✅ Default Municipal Admin created (admin@civiclens.gov / admin123)');
+    }
+
     const count = await User.countDocuments();
-    if (count > 0) return;
+    if (count > 1) return;
 
     const defaultUsers = [
       {
@@ -75,15 +92,18 @@ async function seedDefaultUsers() {
     ];
 
     for (const u of defaultUsers) {
-      const passwordHash = await bcrypt.hash(u.password, 10);
-      await User.create({
-        name: u.name,
-        email: u.email,
-        passwordHash,
-        role: u.role,
-        department: u.department,
-        phone: u.phone
-      });
+      const existing = await User.findOne({ email: u.email });
+      if (!existing) {
+        const passwordHash = await bcrypt.hash(u.password, 10);
+        await User.create({
+          name: u.name,
+          email: u.email,
+          passwordHash,
+          role: u.role,
+          department: u.department,
+          phone: u.phone
+        });
+      }
     }
     console.log('✅ Default users seeded successfully');
   } catch (err) {

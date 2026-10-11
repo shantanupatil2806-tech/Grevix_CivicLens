@@ -67,6 +67,7 @@ exports.createIssue = async (req, res, next) => {
     const issueData = {
       title: title.trim(), description: description.trim(), category,
       location: location.trim(), severity: severity || 'Medium', status: 'Reported',
+      dashboardVisible: true,
       reporter: { name: reporterName ? reporterName.trim() : 'Anonymous', contact: reporterContact ? reporterContact.trim() : '' }
     };
 
@@ -110,20 +111,64 @@ exports.createIssue = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+async function evaluateAutoClose(issueDoc) {
+  if (issueDoc && issueDoc.status === 'Awaiting Citizen Confirmation') {
+    const deadline = issueDoc.citizenFeedback?.autoCloseDeadline;
+    if (deadline && new Date() > new Date(deadline)) {
+      issueDoc.status = 'Closed';
+      issueDoc.citizenFeedback.isConfirmed = true;
+      issueDoc.statusHistory.push({
+        status: 'Closed',
+        note: 'Ticket auto-closed after 5-day citizen verification window without dispute.',
+        changedBy: 'System Automation'
+      });
+      await issueDoc.save();
+    }
+  }
+}
+
 exports.getIssues = async (req, res, next) => {
   try {
-    const { category, severity, status, search, citizenId, limit = 200 } = req.query;
+    const { category, severity, status, search, citizenId, publicOnly, dashboardOnly, limit = 200 } = req.query;
     const filter = {};
+    if (dashboardOnly === 'true') filter.dashboardVisible = true;
     if (citizenId) filter.citizenId = citizenId.trim();
     if (category) filter.category = normalizeCategory(category);
     if (severity) filter.severity = severity;
     if (status) filter.status = status;
+
+    // Public community map / feed: hide Rejected and unreviewed drafts
+    if (publicOnly === 'true') {
+      filter.status = { '$nin': ['Rejected'] };
+    }
+
     if (search) filter['$or'] = [
       { title: { '$regex': search, '$options': 'i' } },
       { description: { '$regex': search, '$options': 'i' } },
       { location: { '$regex': search, '$options': 'i' } },
       { ticketCode: { '$regex': search, '$options': 'i' } }
     ];
+
+    // Lazy auto-close check on expired issues
+    const now = new Date();
+    await Issue.updateMany(
+      {
+        status: 'Awaiting Citizen Confirmation',
+        'citizenFeedback.autoCloseDeadline': { '$lte': now }
+      },
+      {
+        '$set': { status: 'Closed', 'citizenFeedback.isConfirmed': true },
+        '$push': {
+          statusHistory: {
+            status: 'Closed',
+            timestamp: now,
+            note: 'Ticket auto-closed after 5-day citizen verification window without dispute.',
+            updatedBy: 'System Automation'
+          }
+        }
+      }
+    );
+
     const issues = await Issue.find(filter).sort({ createdAt: -1 }).limit(parseInt(limit)).lean();
     const sanitized = issues.map(issue => {
       if (!isOfficer(req)) { delete issue.reporter; delete issue.internalInstructions; }
@@ -137,6 +182,7 @@ exports.getIssueById = async (req, res, next) => {
   try {
     const issue = await Issue.findById(req.params.id).populate('assignedWorker', 'name email department');
     if (!issue) return res.status(404).json({ error: 'Issue not found.' });
+    await evaluateAutoClose(issue);
     res.json(sanitizeIssue(issue, req));
   } catch (err) { next(err); }
 };
@@ -161,13 +207,32 @@ exports.updateIssue = async (req, res, next) => {
 
 exports.updateStatus = async (req, res, next) => {
   try {
-    const { status, note } = req.body;
-    const validStatuses = ['Reported','Under Review','Accepted','Rejected','Assigned','In Progress','Pending Verification','Resolved','Acknowledged'];
+    const validStatuses = [
+      'Reported','Under Review','Accepted','Rejected','Assigned',
+      'In Progress','Pending Verification','Resolved','Acknowledged',
+      'Awaiting Citizen Confirmation','Closed'
+    ];
     if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status value.' });
     const issue = await Issue.findById(req.params.id);
     if (!issue) return res.status(404).json({ error: 'Issue not found.' });
-    issue.status = status;
-    issue.statusHistory.push({ status, note: note || '', changedBy: req.user ? req.user.name : 'System' });
+
+    if (status === 'Resolved' || status === 'Awaiting Citizen Confirmation') {
+      issue.status = 'Awaiting Citizen Confirmation';
+      issue.resolvedAt = new Date();
+      if (!issue.citizenFeedback) {
+        issue.citizenFeedback = { isConfirmed: false, disputeCount: 0, disputes: [] };
+      }
+      issue.citizenFeedback.autoCloseDeadline = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+      issue.statusHistory.push({
+        status: 'Awaiting Citizen Confirmation',
+        note: note || 'Marked resolved by officer. Awaiting citizen confirmation (5-day window).',
+        changedBy: req.user ? req.user.name : 'Officer'
+      });
+    } else {
+      issue.status = status;
+      issue.statusHistory.push({ status, note: note || '', changedBy: req.user ? req.user.name : 'System' });
+    }
+
     await issue.save();
     res.json(sanitizeIssue(issue, req));
   } catch (err) { next(err); }
@@ -243,18 +308,97 @@ exports.assignWorker = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.toggleUpvote = async (req, res, next) => {
+  try {
+    const { citizenId } = req.body;
+    if (!citizenId || !citizenId.trim()) {
+      return res.status(400).json({ error: 'citizenId is required to endorse an issue.' });
+    }
+    const issue = await Issue.findById(req.params.id);
+    if (!issue) return res.status(404).json({ error: 'Issue not found.' });
+
+    if (!issue.upvotedByCitizens) issue.upvotedByCitizens = [];
+    const cleanId = citizenId.trim();
+    const existingIdx = issue.upvotedByCitizens.indexOf(cleanId);
+
+    let action = 'added';
+    if (existingIdx !== -1) {
+      issue.upvotedByCitizens.splice(existingIdx, 1);
+      action = 'removed';
+    } else {
+      issue.upvotedByCitizens.push(cleanId);
+    }
+    issue.upvoteCount = issue.upvotedByCitizens.length;
+
+    // Recalculate priority score factoring in community upvotes (capped at +15)
+    const { score, label, factors } = computeSeverityDetails(issue);
+    issue.priorityScore = score;
+    issue.severity = label;
+    issue.severityFactors = factors;
+
+    await issue.save();
+    const sanitized = sanitizeIssue(issue, req);
+    res.json({
+      ...sanitized,
+      hasUpvoted: action === 'added',
+      upvoteAction: action
+    });
+  } catch (err) { next(err); }
+};
+
+exports.uploadWorkerEvidence = async (req, res, next) => {
+  try {
+    const issue = await Issue.findById(req.params.id);
+    if (!issue) return res.status(404).json({ error: 'Issue not found.' });
+
+    const actorName = req.user ? req.user.name : 'Maintenance Crew';
+    const notes = req.body.notes || req.body.progressNote || '';
+
+    if (!issue.completionEvidence) {
+      issue.completionEvidence = { notes: '', photos: [], submittedAt: new Date() };
+    }
+    if (notes) issue.completionEvidence.notes = notes;
+    issue.completionEvidence.submittedAt = new Date();
+    issue.completionEvidence.submittedBy = actorName;
+
+    if (req.file) {
+      const fullUrl = buildPhotoUrl(req, req.file.filename);
+      if (!issue.completionEvidence.photos) issue.completionEvidence.photos = [];
+      issue.completionEvidence.photos.push(fullUrl);
+    }
+
+    await issue.save();
+    res.json(sanitizeIssue(issue, req));
+  } catch (err) { next(err); }
+};
+
 exports.workerUpdateTask = async (req, res, next) => {
   try {
     const { progressNote, markComplete, evidencePhotos } = req.body;
     const issue = await Issue.findById(req.params.id);
     if (!issue) return res.status(404).json({ error: 'Issue not found.' });
     const actorName = req.user ? req.user.name : 'Worker';
+
+    const photosList = Array.isArray(evidencePhotos) ? evidencePhotos : [];
+    if (req.file) {
+      photosList.push(buildPhotoUrl(req, req.file.filename));
+    }
+
     if (markComplete) {
       issue.status = 'Pending Verification';
-      issue.completionEvidence = { notes: progressNote || 'Work completed', photos: evidencePhotos || [], submittedAt: new Date() };
+      issue.completionEvidence = {
+        notes: progressNote || 'Work completed',
+        photos: photosList,
+        submittedAt: new Date(),
+        submittedBy: actorName
+      };
       issue.statusHistory.push({ status: 'Pending Verification', note: `Work completed by ${actorName}. Awaiting officer verification.`, changedBy: actorName });
     } else {
       issue.status = 'In Progress';
+      if (progressNote) {
+        if (!issue.completionEvidence) issue.completionEvidence = { notes: '', photos: [] };
+        issue.completionEvidence.notes = progressNote;
+      }
       issue.statusHistory.push({ status: 'In Progress', note: progressNote || 'Work in progress', changedBy: actorName });
     }
     await issue.save(); res.json(sanitizeIssue(issue, req));
@@ -267,13 +411,110 @@ exports.verifyAndResolve = async (req, res, next) => {
     const issue = await Issue.findById(req.params.id);
     if (!issue) return res.status(404).json({ error: 'Issue not found.' });
     if (approved) {
-      issue.status = 'Resolved'; issue.resolvedAt = new Date();
-      issue.statusHistory.push({ status: 'Resolved', note: 'Work verified and approved by officer', changedBy: req.user.name });
+      // Step into "Awaiting Citizen Confirmation" with 5-day auto-close countdown
+      issue.status = 'Awaiting Citizen Confirmation';
+      issue.resolvedAt = new Date();
+      if (!issue.citizenFeedback) {
+        issue.citizenFeedback = { isConfirmed: false, disputeCount: 0, disputes: [] };
+      }
+      issue.citizenFeedback.autoCloseDeadline = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+      issue.statusHistory.push({
+        status: 'Awaiting Citizen Confirmation',
+        note: 'Work approved by officer. Awaiting citizen confirmation (5-day window).',
+        changedBy: req.user.name
+      });
     } else {
       issue.status = 'In Progress';
       issue.statusHistory.push({ status: 'In Progress', note: `Returned for rework: ${returnReason || 'Officer requested additional work'}`, changedBy: req.user.name });
     }
     await issue.save(); res.json(sanitizeIssue(issue, req));
+  } catch (err) { next(err); }
+};
+
+exports.verifyCitizenFeedback = async (req, res, next) => {
+  try {
+    const { decision, citizenId, ticketCode, reason } = req.body;
+    if (!decision || !['confirm', 'dispute'].includes(decision)) {
+      return res.status(400).json({ error: "decision must be 'confirm' or 'dispute'." });
+    }
+
+    const issue = await Issue.findById(req.params.id);
+    if (!issue) return res.status(404).json({ error: 'Issue not found.' });
+
+    // Security check: Only the original citizen reporter can confirm or dispute
+    const callerId = (citizenId || '').trim();
+    const callerTicket = (ticketCode || '').trim();
+    const isOriginalReporter = (
+      (callerId && (issue.citizenId === callerId || issue.reporter?.citizenId === callerId)) ||
+      (callerTicket && issue.ticketCode && issue.ticketCode.toLowerCase() === callerTicket.toLowerCase())
+    );
+
+    if (!isOriginalReporter) {
+      return res.status(403).json({
+        error: 'Security verification failed: Only the original reporter can confirm resolution or dispute this ticket.'
+      });
+    }
+
+    if (!issue.citizenFeedback) {
+      issue.citizenFeedback = { isConfirmed: false, disputeCount: 0, disputes: [] };
+    }
+
+    if (decision === 'confirm') {
+      issue.status = 'Closed';
+      issue.citizenFeedback.isConfirmed = true;
+      issue.citizenFeedback.confirmedAt = new Date();
+      issue.statusHistory.push({
+        status: 'Closed',
+        note: 'Resolution verified and accepted by citizen. Ticket permanently closed.',
+        changedBy: issue.reporter?.name || 'Citizen Reporter'
+      });
+      await issue.save();
+      return res.json(sanitizeIssue(issue, req));
+    }
+
+    if (decision === 'dispute') {
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: 'Please provide a reason explaining why the issue is not fixed.' });
+      }
+
+      // Anti-abuse: Capped at maximum 2 disputes per ticket
+      const currentDisputes = issue.citizenFeedback.disputeCount || 0;
+      if (currentDisputes >= 2) {
+        return res.status(400).json({
+          error: 'Maximum dispute limit (2) reached for this ticket. Please contact municipal headquarters directly.'
+        });
+      }
+
+      let disputePhotoUrl = null;
+      if (req.file) {
+        disputePhotoUrl = buildPhotoUrl(req, req.file.filename);
+      }
+
+      issue.citizenFeedback.disputeCount = currentDisputes + 1;
+      issue.citizenFeedback.disputes.push({
+        reason: reason.trim(),
+        photo: disputePhotoUrl,
+        timestamp: new Date(),
+        citizenId: callerId
+      });
+
+      issue.status = 'In Progress';
+      issue.reopenedHistory.push({
+        reopenedAt: new Date(),
+        reason: `Citizen dispute: ${reason.trim()}`,
+        reopenedBy: issue.reporter?.name || 'Citizen Reporter',
+        isCitizenDispute: true
+      });
+
+      issue.statusHistory.push({
+        status: 'In Progress',
+        note: `Resolution disputed by citizen (${issue.citizenFeedback.disputeCount}/2): ${reason.trim()}`,
+        changedBy: 'Citizen Dispute'
+      });
+
+      await issue.save();
+      return res.json(sanitizeIssue(issue, req));
+    }
   } catch (err) { next(err); }
 };
 
@@ -283,7 +524,7 @@ exports.reopenIssue = async (req, res, next) => {
     if (!reason) return res.status(400).json({ error: 'reason is required to reopen an issue.' });
     const issue = await Issue.findById(req.params.id);
     if (!issue) return res.status(404).json({ error: 'Issue not found.' });
-    issue.reopenedHistory.push({ reopenedAt: new Date(), reason, reopenedBy: req.user.name });
+    issue.reopenedHistory.push({ reopenedAt: new Date(), reason, reopenedBy: req.user.name, isCitizenDispute: false });
     issue.status = 'Under Review';
     issue.statusHistory.push({ status: 'Under Review', note: `Reopened: ${reason}`, changedBy: req.user.name });
     await issue.save(); res.json(sanitizeIssue(issue, req));

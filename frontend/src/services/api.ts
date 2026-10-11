@@ -5,17 +5,25 @@ const BASE_URL = 'https://civiclens-backend-ucyz.onrender.com/api';
 
 const api = axios.create({ baseURL: BASE_URL });
 
+// Initialize stored token on startup
+const storedToken = typeof localStorage !== 'undefined' ? localStorage.getItem('civiclens_auth_token') : null;
+if (storedToken) {
+  api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+}
+
 export interface CreateIssueResponse {
   issue: Issue;
   analysis: AnalysisResult;
 }
 
-export async function fetchIssues(filters?: Partial<IssueFilters>): Promise<{ issues: Issue[]; isDatabase?: boolean }> {
+export async function fetchIssues(filters?: Partial<IssueFilters> & { dashboardOnly?: boolean; publicOnly?: boolean }): Promise<{ issues: Issue[]; isDatabase?: boolean }> {
   const params: Record<string, string> = {};
   if (filters?.search) params.search = filters.search;
   if (filters?.category) params.category = filters.category;
   if (filters?.status) params.status = filters.status;
   if (filters?.minSeverity) params.minSeverity = String(filters.minSeverity);
+  if (filters?.dashboardOnly) params.dashboardOnly = 'true';
+  if (filters?.publicOnly) params.publicOnly = 'true';
   const { data } = await api.get<any>('/issues', { params });
   // Backend now returns { issues: [...], isDatabase: true }; handle legacy raw array gracefully
   const issues: Issue[] = Array.isArray(data) ? data : (data?.issues ?? []);
@@ -77,18 +85,94 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: 'citizen' | 'officer' | 'worker';
+  role: 'citizen' | 'officer' | 'worker' | 'admin';
   department: string;
   phone: string;
+  active?: boolean;
+  mustChangePassword?: boolean;
+  createdAt?: string;
 }
 
 export async function loginUser(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
   const { data } = await api.post('/auth/login', { email, password });
   if (data?.token) {
     localStorage.setItem('civiclens_auth_token', data.token);
+    localStorage.setItem('civiclens_auth_user', JSON.stringify(data.user));
     api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
   }
   return data;
+}
+
+export function getStoredAuthUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem('civiclens_auth_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function logoutUser() {
+  localStorage.removeItem('civiclens_auth_token');
+  localStorage.removeItem('civiclens_auth_user');
+  delete api.defaults.headers.common['Authorization'];
+}
+
+export async function changePasswordApi(currentPassword: string | undefined, newPassword: string): Promise<{ message: string }> {
+  const { data } = await api.post('/auth/change-password', { currentPassword, newPassword });
+  return data;
+}
+
+export async function forgotPasswordApi(email: string): Promise<{ message: string }> {
+  const { data } = await api.post('/auth/forgot-password', { email });
+  return data;
+}
+
+export async function fetchCurrentUser(): Promise<{ user: AuthUser }> {
+  const { data } = await api.get('/auth/me');
+  return data;
+}
+
+/** Normalize MongoDB _id → id so frontend AuthUser.id is always populated */
+function normalizeUser(u: any): AuthUser {
+  return {
+    ...u,
+    id: u.id || (u._id ? u._id.toString() : ''),
+  };
+}
+
+// Admin User Management APIs
+export async function adminFetchUsers(): Promise<{ users: AuthUser[] }> {
+  const { data } = await api.get('/auth/admin/users');
+  const users: AuthUser[] = (data.users || []).map(normalizeUser);
+  return { users };
+}
+
+export async function adminCreateUserApi(payload: {
+  name: string;
+  email: string;
+  password: string;
+  role: 'officer' | 'worker' | 'admin';
+  department?: string;
+  phone?: string;
+}): Promise<{ message: string; user: AuthUser }> {
+  const { data } = await api.post('/auth/admin/users', payload);
+  return { ...data, user: data.user ? normalizeUser(data.user) : data.user };
+}
+
+export async function adminUpdateUserApi(
+  id: string,
+  payload: {
+    name?: string;
+    department?: string;
+    phone?: string;
+    active?: boolean;
+    role?: string;
+    newPassword?: string;
+  }
+): Promise<{ message: string; user: AuthUser }> {
+  const { data } = await api.patch(`/auth/admin/users/${id}`, payload);
+  return { ...data, user: data.user ? normalizeUser(data.user) : data.user };
 }
 
 export function setAuthToken(token: string | null) {
@@ -132,5 +216,34 @@ export async function verifyAndResolveIssue(
   payload: { approved: boolean; returnReason?: string }
 ): Promise<Issue> {
   const { data } = await api.post(`/issues/${issueId}/verify-resolve`, payload);
+  return (data && data._id) ? data : (data?.issue || data);
+}
+
+export async function toggleIssueUpvote(
+  issueId: string,
+  citizenId: string
+): Promise<{ issue: Issue; hasUpvoted: boolean }> {
+  const { data } = await api.post(`/issues/${issueId}/upvote`, { citizenId });
+  const issue = (data && data._id) ? data : (data?.issue || data);
+  return { issue, hasUpvoted: Boolean(data?.hasUpvoted) };
+}
+
+export async function uploadWorkerEvidencePhoto(
+  issueId: string,
+  formData: FormData
+): Promise<Issue> {
+  const { data } = await api.post(`/issues/${issueId}/worker-evidence`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return (data && data._id) ? data : (data?.issue || data);
+}
+
+export async function verifyCitizenFeedback(
+  issueId: string,
+  formData: FormData
+): Promise<Issue> {
+  const { data } = await api.post(`/issues/${issueId}/verify-citizen`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
   return (data && data._id) ? data : (data?.issue || data);
 }

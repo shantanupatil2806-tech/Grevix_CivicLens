@@ -61,27 +61,27 @@ export default function ConnectivityIndicator({ onOpenQueue }: Props) {
             ? 'Connected to CivicLens server'
             : 'Offline: Reports will be saved locally'
         }
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-semibold border transition-all cursor-pointer ${
           isSyncing
-            ? 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse'
+            ? 'bg-blue-950/60 text-blue-300 border-blue-800 animate-pulse'
             : !isOnline
-            ? 'bg-amber-50 text-amber-800 border-amber-300'
-            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            ? 'bg-amber-950/60 text-amber-300 border-amber-800'
+            : 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
         }`}
       >
         {isSyncing ? (
           <>
-            <RefreshCw size={12} className="animate-spin text-blue-600" />
+            <RefreshCw size={12} className="animate-spin text-blue-400" />
             <span>Syncing</span>
           </>
         ) : !isOnline ? (
           <>
-            <WifiOff size={12} className="text-amber-600" />
+            <WifiOff size={12} className="text-amber-400" />
             <span>Offline</span>
           </>
         ) : (
           <>
-            <Wifi size={12} className="text-emerald-600" />
+            <Wifi size={14} className="text-emerald-400" />
             <span>Online</span>
           </>
         )}

@@ -199,6 +199,7 @@ export default function CivicMap({
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="dark-map-tiles"
           maxZoom={19}
         />
 
@@ -217,14 +218,14 @@ export default function CivicMap({
               }}
             >
               <Tooltip
-                direction="top"
+                direction="auto"
                 offset={[0, -18]}
                 opacity={0.96}
                 className="custom-leaflet-tooltip shadow-lg rounded-xl border border-gray-200"
               >
                 <div className="px-1 py-0.5 max-w-[220px]">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="font-semibold text-xs text-gray-900 truncate">
+                    <span className="font-semibold text-xs text-slate-100 whitespace-normal break-words leading-snug">
                       {issue.title}
                     </span>
                   </div>
@@ -245,7 +246,7 @@ export default function CivicMap({
                     >
                       {isResolved ? 'Resolved' : `Priority ${score}/100`}
                     </span>
-                    <span className="text-gray-500 font-medium ml-auto">
+                    <span className="text-slate-300 font-medium ml-auto">
                       {issue.status}
                     </span>
                   </div>
@@ -258,15 +259,17 @@ export default function CivicMap({
 
       {/* Floating Instructions & Dynamic Legend Bar */}
       <div className="absolute bottom-3 left-4 right-4 z-10 pointer-events-none flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="pointer-events-auto bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-gray-200/80 flex items-center gap-2 text-gray-600">
-          <MapPin size={13} className="text-blue-600 shrink-0" />
-          <span className="font-medium text-[11px]">Click anywhere on map to report an issue</span>
-        </div>
+        {onOpenReportModal && (
+          <div className="pointer-events-auto bg-slate-900/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-xl border border-slate-700/80 flex items-center gap-2 text-slate-200">
+            <MapPin size={13} className="text-blue-400 shrink-0" />
+            <span className="font-medium text-[11px]">Click anywhere on map to report an issue</span>
+          </div>
+        )}
 
-        <div className="pointer-events-auto bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-xl shadow-md border border-gray-200/80 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-gray-700">
+        <div className="pointer-events-auto bg-slate-900/90 backdrop-blur-md px-3.5 py-2 rounded-xl shadow-xl border border-slate-700/80 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-200 ml-auto">
           {/* Category Pin Color Legend */}
-          <div className="flex items-center gap-2.5 border-r border-gray-200 pr-3">
-            <span className="text-gray-400 font-semibold uppercase text-[10px] tracking-wide">Category:</span>
+          <div className="flex items-center gap-2.5 border-r border-slate-700/80 pr-3">
+            <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wide">Category:</span>
             <div className="flex items-center gap-1 font-medium">
               <span className="w-2.5 h-2.5 rounded-full shadow-xs" style={{ backgroundColor: '#F97316' }} />
               <span>Roads</span>
@@ -291,14 +294,14 @@ export default function CivicMap({
 
           {/* Priority / Status indicator */}
           <div className="flex items-center gap-2.5">
-            <span className="text-gray-400 font-semibold uppercase text-[10px] tracking-wide">Status:</span>
+            <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wide">Status:</span>
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs flex items-center justify-center text-[7px] text-white">✓</span>
-              <span className="font-medium text-emerald-700">Resolved</span>
+              <span className="font-medium text-emerald-400">Resolved</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full border-2 border-red-500 bg-red-100" />
-              <span className="font-medium text-red-700">Critical (≥80)</span>
+              <span className="w-2.5 h-2.5 rounded-full border-2 border-red-500 bg-red-950/60" />
+              <span className="font-medium text-red-400">Critical (≥80)</span>
             </div>
           </div>
         </div>

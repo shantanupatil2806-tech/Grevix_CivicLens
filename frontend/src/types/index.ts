@@ -10,6 +10,8 @@ export type Status =
   | 'In Progress'
   | 'Pending Verification'
   | 'Resolved'
+  | 'Awaiting Citizen Confirmation'
+  | 'Closed'
   | 'Acknowledged';
 export type Severity = 'Low' | 'Medium' | 'High' | 'Critical';
 
@@ -20,8 +22,24 @@ export interface StatusHistoryEntry {
   updatedBy: string;
 }
 
+export interface CitizenDispute {
+  reason: string;
+  photo?: string | null;
+  timestamp: string;
+  citizenId?: string | null;
+}
+
+export interface CitizenFeedback {
+  isConfirmed: boolean;
+  confirmedAt?: string | null;
+  autoCloseDeadline?: string | null;
+  disputeCount: number;
+  disputes?: CitizenDispute[];
+}
+
 export interface Issue {
   _id: string;
+  dashboardVisible?: boolean;
   ticketCode?: string; // e.g. "ANO-3426-456"
   title: string;
   description: string;
@@ -29,12 +47,16 @@ export interface Issue {
   location: string;
   coordinates?: { lat: number; lng: number }; // [lat, lng] for geospatial map
   imagePath?: string | null;
-  photos?: string[]; // multiple photo gallery
+  photos?: string[]; // multiple photo gallery (initial report)
   severityScore: number;
   priorityScore: number;
   severityFactors?: string[];
   categoryReasons?: string[];
   status: Status;
+  // Community Impact
+  upvoteCount?: number;
+  upvotedByCitizens?: string[];
+  hasUpvoted?: boolean;
   duplicateOf?: string | null;
   duplicateReason?: string | null;
   assignedWorker?: string | null;
@@ -44,9 +66,17 @@ export interface Issue {
   internalInstructions?: string | null;
   completionEvidence?: {
     notes: string;
-    photos: string[];
+    photos: string[]; // After-repair proof photos
     submittedAt?: string | null;
+    submittedBy?: string | null;
   } | null;
+  citizenFeedback?: CitizenFeedback | null;
+  reopenedHistory?: Array<{
+    reopenedAt: string;
+    reason: string;
+    reopenedBy: string;
+    isCitizenDispute?: boolean;
+  }>;
   statusHistory?: StatusHistoryEntry[];
   citizenId?: string;
   createdAt: string;
@@ -74,6 +104,7 @@ export interface IssueFilters {
   category: Category | '';
   status: Status | '';
   minSeverity: number;
+  publicOnly?: boolean;
 }
 
 export type SyncStatus =

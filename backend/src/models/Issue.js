@@ -13,6 +13,8 @@ const StatusHistorySchema = new mongoose.Schema({
       'In Progress',
       'Pending Verification',
       'Resolved',
+      'Awaiting Citizen Confirmation',
+      'Closed',
       'Acknowledged' // legacy support
     ],
     required: true
@@ -20,6 +22,13 @@ const StatusHistorySchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
   note: { type: String, default: '' },
   updatedBy: { type: String, default: 'Civic Admin' }
+}, { _id: false });
+
+const DisputeSchema = new mongoose.Schema({
+  reason: { type: String, required: true },
+  photo: { type: String, default: null },
+  timestamp: { type: Date, default: Date.now },
+  citizenId: { type: String, default: null }
 }, { _id: false });
 
 const IssueSchema = new mongoose.Schema({
@@ -67,10 +76,16 @@ const IssueSchema = new mongoose.Schema({
       'In Progress',
       'Pending Verification',
       'Resolved',
+      'Awaiting Citizen Confirmation',
+      'Closed',
       'Acknowledged'
     ],
     default: 'Reported'
   },
+  // Community Impact / Upvotes ("Me Too")
+  upvoteCount: { type: Number, default: 0 },
+  upvotedByCitizens: [{ type: String }], // Array of citizenIds
+
   // Private reporter info (only accessible to officers)
   reporter: {
     name: { type: String, default: 'Anonymous Citizen' },
@@ -78,6 +93,7 @@ const IssueSchema = new mongoose.Schema({
     citizenId: { type: String, default: null }
   },
   citizenId: { type: String, default: null, index: true },
+  dashboardVisible: { type: Boolean, default: false },
   // Assignment & Officer Workflow
   assignedWorker: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   assignedWorkerName: { type: String, default: null },
@@ -96,18 +112,29 @@ const IssueSchema = new mongoose.Schema({
     overriddenAt: { type: Date, default: null }
   },
 
-  // Completion Evidence by Worker
+  // Completion Evidence by Worker / Officer (After-Repair Proof)
   completionEvidence: {
     notes: { type: String, default: '' },
-    photos: [{ type: String }],
-    submittedAt: { type: Date, default: null }
+    photos: [{ type: String }], // URLs of after-repair photos
+    submittedAt: { type: Date, default: null },
+    submittedBy: { type: String, default: null }
+  },
+
+  // Citizen Resolution Verification Loop & Abuse Protection
+  citizenFeedback: {
+    isConfirmed: { type: Boolean, default: false },
+    confirmedAt: { type: Date, default: null },
+    autoCloseDeadline: { type: Date, default: null }, // e.g. 5 days after resolution
+    disputeCount: { type: Number, default: 0 }, // Capped at 2 reopens max
+    disputes: [DisputeSchema]
   },
 
   // Reopened Tracking
   reopenedHistory: [{
     reopenedAt: { type: Date, default: Date.now },
     reason: { type: String, default: '' },
-    reopenedBy: { type: String, default: 'Civic Officer' }
+    reopenedBy: { type: String, default: 'Civic Officer' },
+    isCitizenDispute: { type: Boolean, default: false }
   }],
 
   duplicateOf: { type: mongoose.Schema.Types.ObjectId, ref: 'Issue', default: null },

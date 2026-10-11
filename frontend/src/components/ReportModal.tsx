@@ -361,21 +361,21 @@ export default function ReportModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto my-auto border border-gray-100 animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 overflow-y-auto">
+      <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto my-auto border border-slate-800 animate-fadeIn">
         {/* Header */}
-        <div className="sticky top-0 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-slate-900/95 backdrop-blur-md px-6 py-4 border-b border-slate-800 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 leading-snug">
+            <h2 className="text-lg font-bold text-slate-100 leading-snug">
               Report New Civic Issue
             </h2>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-slate-400">
               Pinpoint problem on community map with real-time AI triage
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
           >
             <X size={20} />
           </button>
@@ -386,39 +386,39 @@ export default function ReportModal({
           {/* Left: Input Form (7 cols) */}
           <form onSubmit={handleSubmit} className="md:col-span-7 space-y-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Issue Title <span className="text-red-500">*</span>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Issue Title <span className="text-red-400">*</span>
               </label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Deep pothole on MG Road near Domino's"
-                className={`w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                  fieldErrors.title ? "border-red-400" : "border-gray-200"
+                className={`w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-950 text-slate-100 placeholder:text-slate-600 ${
+                  fieldErrors.title ? "border-red-500" : "border-slate-700"
                 }`}
               />
               {fieldErrors.title && (
-                <p className="text-[11px] text-red-500 mt-0.5">
+                <p className="text-[11px] text-red-400 mt-0.5">
                   {fieldErrors.title}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Description <span className="text-red-500">*</span>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Description <span className="text-red-400">*</span>
               </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 placeholder="Describe the issue, road damage, risks, obstruction..."
-                className={`w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none ${
-                  fieldErrors.description ? "border-red-400" : "border-gray-200"
+                className={`w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none bg-slate-950 text-slate-100 placeholder:text-slate-600 ${
+                  fieldErrors.description ? "border-red-500" : "border-slate-700"
                 }`}
               />
               {fieldErrors.description && (
-                <p className="text-[11px] text-red-500 mt-0.5">
+                <p className="text-[11px] text-red-400 mt-0.5">
                   {fieldErrors.description}
                 </p>
               )}
@@ -426,21 +426,21 @@ export default function ReportModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1">
                   Category
                 </label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as Category | "")}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-700 rounded-lg text-xs bg-slate-950 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                 >
-                  <option value="">
+                  <option value="" className="bg-slate-900">
                     {analysis?.category
                       ? `AI Suggests: ${analysis.category}`
                       : "Choose Category..."}
                   </option>
                   {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
+                    <option key={c} value={c} className="bg-slate-900">
                       {c}
                     </option>
                   ))}
@@ -449,12 +449,12 @@ export default function ReportModal({
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-gray-700">
+                  <label className="block text-xs font-bold text-slate-300">
                     Location / Pincode / Area{" "}
-                    <span className="text-red-500">*</span>
+                    <span className="text-red-400">*</span>
                   </label>
                   {isGeocoding && (
-                    <span className="text-[10px] text-blue-600 flex items-center gap-1 font-medium">
+                    <span className="text-[10px] text-blue-400 flex items-center gap-1 font-medium">
                       <Loader2 size={10} className="animate-spin" />{" "}
                       Geocoding...
                     </span>
@@ -463,7 +463,7 @@ export default function ReportModal({
                 <div className="relative">
                   <MapPin
                     size={13}
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"
                   />
                   <input
                     value={location}
@@ -472,33 +472,33 @@ export default function ReportModal({
                       setLocation(e.target.value);
                     }}
                     placeholder="e.g. 411038 Pune or Kothrud, Pune"
-                    className={`w-full pl-7 pr-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-950 text-slate-100 placeholder:text-slate-600 ${
                       fieldErrors.location
-                        ? "border-red-400 bg-red-50/20"
-                        : "border-gray-200"
+                        ? "border-red-500 bg-red-950/20"
+                        : "border-slate-700"
                     }`}
                   />
                 </div>
                 {/* Visual feedback for coordinates */}
                 {resolvedCoords && (
-                  <p className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5 mt-1 flex items-center gap-1">
+                  <p className="text-[10px] text-emerald-300 bg-emerald-950/50 border border-emerald-800 rounded px-2 py-0.5 mt-1 flex items-center gap-1">
                     <Crosshair
                       size={11}
-                      className="text-emerald-600 shrink-0"
+                      className="text-emerald-400 shrink-0"
                     />
                     <span className="font-mono">
                       Coordinates: [{resolvedCoords.lat.toFixed(5)},{" "}
                       {resolvedCoords.lng.toFixed(5)}]
                     </span>
                     {resolvedAddressName && (
-                      <span className="truncate max-w-[140px] text-emerald-800">
+                      <span className="truncate max-w-[140px] text-emerald-300">
                         ({resolvedAddressName})
                       </span>
                     )}
                   </p>
                 )}
                 {fieldErrors.location && (
-                  <p className="text-[11px] text-red-500 mt-1 leading-snug flex items-start gap-1">
+                  <p className="text-[11px] text-red-400 mt-1 leading-snug flex items-start gap-1">
                     <AlertCircle size={12} className="shrink-0 mt-0.5" />
                     <span>{fieldErrors.location}</span>
                   </p>
@@ -508,7 +508,7 @@ export default function ReportModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1">
                   Observation Date
                 </label>
                 <input
@@ -516,18 +516,18 @@ export default function ReportModal({
                   value={observedAt}
                   max={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setObservedAt(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-950 text-slate-100 cursor-pointer"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1">
                   Photo Evidence
                 </label>
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-700 rounded-lg text-xs text-slate-400 hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <Upload size={13} />
                   <span>{imageFile ? "Change Photo" : "Upload Photo"}</span>
@@ -546,7 +546,7 @@ export default function ReportModal({
               <div className="relative inline-block mt-2">
                 <img
                   src={imagePreview}
-                  className="w-28 h-20 object-cover rounded-lg border border-gray-200 shadow-2xs"
+                  className="w-28 h-20 object-cover rounded-lg border border-slate-700 shadow-2xs"
                   alt="Preview"
                 />
                 <button
@@ -555,7 +555,7 @@ export default function ReportModal({
                     setImageFile(null);
                     setImagePreview(null);
                   }}
-                  className="absolute -top-1.5 -right-1.5 bg-white text-gray-500 hover:text-red-600 rounded-full border border-gray-300 p-0.5 shadow"
+                  className="absolute -top-1.5 -right-1.5 bg-slate-800 text-slate-400 hover:text-red-400 rounded-full border border-slate-700 p-0.5 shadow cursor-pointer"
                 >
                   <X size={12} />
                 </button>
@@ -564,7 +564,7 @@ export default function ReportModal({
 
             {success && (
               <div
-                className={`flex items-center gap-2 p-2.5 text-xs rounded-lg border ${success === "offline" ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-green-50 text-green-700 border-green-200"}`}
+                className={`flex items-center gap-2 p-2.5 text-xs rounded-lg border ${success === "offline" ? "bg-amber-950/60 text-amber-300 border-amber-800" : "bg-emerald-950/60 text-emerald-300 border-emerald-800"}`}
               >
                 <CheckCircle2 size={15} />
                 <span>
@@ -597,32 +597,32 @@ export default function ReportModal({
           </form>
 
           {/* Right: AI Intelligence Panel (5 cols) */}
-          <div className="md:col-span-5 bg-gradient-to-br from-slate-50 to-blue-50/50 p-4 rounded-xl border border-blue-100 flex flex-col justify-between space-y-4">
+          <div className="md:col-span-5 bg-slate-950/70 p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-4">
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-gray-200/80">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-1.5">
-                  <Sparkles size={16} className="text-blue-600" />
-                  <span className="text-xs font-bold text-blue-950 uppercase tracking-wide">
+                  <Sparkles size={16} className="text-blue-400" />
+                  <span className="text-xs font-bold text-blue-300 uppercase tracking-wide">
                     Live AI Triage
                   </span>
                 </div>
                 {isAnalyzing && (
-                  <span className="flex items-center gap-1 text-[10px] text-blue-600 font-medium">
+                  <span className="flex items-center gap-1 text-[10px] text-blue-400 font-medium">
                     <Loader2 size={11} className="animate-spin" /> Analyzing
                   </span>
                 )}
               </div>
 
               {!analysis ? (
-                <div className="py-8 text-center text-gray-400 space-y-2">
+                <div className="py-8 text-center text-slate-500 space-y-2">
                   <FileText
                     size={26}
-                    className="mx-auto opacity-30 text-blue-500"
+                    className="mx-auto opacity-30 text-blue-400"
                   />
-                  <p className="text-xs font-medium text-gray-600">
+                  <p className="text-xs font-medium text-slate-300">
                     Type details to preview AI scoring
                   </p>
-                  <p className="text-[10px] text-gray-400">
+                  <p className="text-[10px] text-slate-500">
                     Live detection will automatically estimate category,
                     severity score, and duplicate reports.
                   </p>
@@ -631,14 +631,14 @@ export default function ReportModal({
                 <div className="space-y-3.5 pt-3">
                   {/* Category */}
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Predicted Category
                     </span>
-                    <div className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-gray-200 mt-1">
-                      <span className="text-xs font-bold text-gray-800">
+                    <div className="flex items-center justify-between bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 mt-1">
+                      <span className="text-xs font-bold text-slate-200">
                         {analysis.category}
                       </span>
-                      <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-1.5 py-0.2 rounded">
+                      <span className="text-[10px] font-bold text-teal-400 bg-teal-950/60 border border-teal-850 px-1.5 py-0.2 rounded">
                         {analysis.confidence}% Confidence
                       </span>
                     </div>
@@ -647,7 +647,7 @@ export default function ReportModal({
                   {/* Priority */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         Priority Score
                       </span>
                       <span
@@ -658,17 +658,17 @@ export default function ReportModal({
                         {analysis.severityLabel} ({analysis.severityScore}/100)
                       </span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                        className="h-full bg-blue-500 rounded-full transition-all duration-300"
                         style={{ width: `${analysis.severityScore}%` }}
                       />
                     </div>
                     {analysis.severityFactors &&
                       analysis.severityFactors.length > 0 && (
-                        <div className="mt-2 space-y-1 bg-white p-2.5 rounded-lg border border-gray-200">
+                        <div className="mt-2 space-y-1 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
                           {analysis.severityFactors.slice(0, 3).map((f, i) => (
-                            <p key={i} className="text-[10px] text-gray-600">
+                            <p key={i} className="text-[10px] text-slate-400">
                               • {f}
                             </p>
                           ))}
@@ -678,14 +678,14 @@ export default function ReportModal({
 
                   {/* Duplicate warning */}
                   {analysis.duplicate && (
-                    <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1">
-                      <div className="flex items-center gap-1 font-bold text-amber-800 text-[11px]">
+                    <div className="p-2.5 bg-amber-950/60 rounded-lg border border-amber-800 text-xs text-amber-200 space-y-1">
+                      <div className="flex items-center gap-1 font-bold text-amber-400 text-[11px]">
                         <ShieldAlert size={13} />
                         <span>
                           Potential Duplicate ({analysis.duplicate.similarity}%)
                         </span>
                       </div>
-                      <p className="text-[11px] truncate">
+                      <p className="text-[11px] truncate text-amber-300">
                         "{analysis.duplicate.title}"
                       </p>
                     </div>
@@ -694,7 +694,7 @@ export default function ReportModal({
               )}
             </div>
 
-            <p className="text-[10px] text-gray-400 italic text-center">
+            <p className="text-[10px] text-slate-500 italic text-center">
               Rule-based civic algorithms. Modular and LLM-API upgrade ready.
             </p>
           </div>

@@ -8,10 +8,17 @@ import IssueTable from "./components/IssueTable";
 import ReportModal from "./components/ReportModal";
 import CitizenPortal from "./components/CitizenPortal";
 import WorkerPortal from "./components/WorkerPortal";
+import AdminPortal from "./components/AdminPortal";
+import StaffLoginModal from "./components/StaffLoginModal";
 import OfflineReportQueue from "./components/OfflineReportQueue";
 import type { Issue, IssueFilters } from "./types";
 import { sampleIssues } from "./data/sampleIssues";
-import { fetchIssues } from "./services/api";
+import {
+  fetchIssues,
+  getStoredAuthUser,
+  logoutUser,
+  type AuthUser,
+} from "./services/api";
 import { connectivity } from "./services/connectivity";
 import { syncEngine } from "./services/syncEngine";
 import { normalizeCategory } from "./utils/category";
@@ -22,7 +29,6 @@ const DEFAULT_FILTERS: IssueFilters = {
   status: "",
   minSeverity: 0,
 };
-
 export default function App() {
   const [issues, setIssues] = useState<Issue[]>(sampleIssues);
   const [filters, setFilters] = useState<IssueFilters>(DEFAULT_FILTERS);
@@ -31,14 +37,25 @@ export default function App() {
   ); // Select first issue by default like in reference
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
+  const [isStaffLoginOpen, setIsStaffLoginOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() =>
+    getStoredAuthUser(),
+  );
+
   const [clickedCoords, setClickedCoords] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "table">("map");
-  const [portalMode, setPortalMode] = useState<"citizen" | "officer" | "worker">(
-    "citizen",
-  );
+  const [portalMode, setPortalMode] = useState<
+    "citizen" | "officer" | "worker" | "admin"
+  >(() => {
+    const u = getStoredAuthUser();
+    if (u?.role === "admin") return "admin";
+    if (u?.role === "officer") return "officer";
+    if (u?.role === "worker") return "worker";
+    return "citizen";
+  });
 
   const [loading, setLoading] = useState(false);
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
@@ -51,11 +68,11 @@ export default function App() {
     async function loadIssues() {
       setLoading(true);
       try {
-        const response = await fetchIssues();
+        const response = await fetchIssues({ dashboardOnly: true });
         if (!isActive) return;
-        if (response.issues && response.issues.length > 0) {
-          // If we have actual issues in MongoDB, map them preserving exact stored coordinates
-          const dbIssues = response.issues.map((iss, idx) => ({
+        const dbIssues = response.issues
+          .filter((issue) => issue.dashboardVisible === true)
+          .map((iss, idx) => ({
             ...iss,
             ticketCode:
               iss.ticketCode ||
@@ -69,14 +86,9 @@ export default function App() {
                 : undefined,
             isDemo: false,
           }));
-          setIssues(dbIssues);
-          setSelectedIssue(dbIssues[0]);
-          setHasRealDbData(true);
-        } else {
-          setIssues(sampleIssues);
-          setSelectedIssue(sampleIssues[0]);
-          setHasRealDbData(false);
-        }
+        setIssues([...dbIssues, ...sampleIssues]);
+        setSelectedIssue(dbIssues[0] || sampleIssues[0]);
+        setHasRealDbData(dbIssues.length > 0);
         setBackendUp(true);
       } catch {
         if (!isActive) return;
@@ -149,7 +161,11 @@ export default function App() {
     ) {
       return false;
     }
-    if (filters.category && normalizeCategory(issue.category) !== normalizeCategory(filters.category)) return false;
+    if (
+      filters.category &&
+      normalizeCategory(issue.category) !== normalizeCategory(filters.category)
+    )
+      return false;
     if (filters.status && issue.status !== filters.status) return false;
     if (issue.severityScore < filters.minSeverity) return false;
     return true;
@@ -157,38 +173,122 @@ export default function App() {
 
   // Summary Metrics
   const total = issues.length;
+  const visibleLiveIssueCount = issues.filter((issue) => !issue.isDemo).length;
   const inProgress = issues.filter((i) => i.status === "In Progress").length;
   const critical = issues.filter(
     (i) => i.severityScore >= 80 && i.status !== "Resolved",
   ).length;
   const resolved = issues.filter((i) => i.status === "Resolved").length;
 
+  function handleStaffLoginSuccess(user: AuthUser) {
+    setCurrentUser(user);
+    setIsStaffLoginOpen(false);
+    if (user.role === "admin") {
+      setPortalMode("admin");
+    } else if (user.role === "officer") {
+      setPortalMode("officer");
+    } else if (user.role === "worker") {
+      setPortalMode("worker");
+    }
+  }
+
+  function handleLogout() {
+    logoutUser();
+    setCurrentUser(null);
+    setPortalMode("citizen");
+  }
+
+  function handleAttemptPortalSwitch(
+    targetMode: "officer" | "worker" | "admin",
+  ) {
+    if (!currentUser) {
+      setIsStaffLoginOpen(true);
+      return;
+    }
+    if (targetMode === "admin" && currentUser.role !== "admin") {
+      setIsStaffLoginOpen(true);
+      return;
+    }
+    if (
+      targetMode === "officer" &&
+      currentUser.role !== "officer" &&
+      currentUser.role !== "admin"
+    ) {
+      setIsStaffLoginOpen(true);
+      return;
+    }
+    if (targetMode === "worker" && currentUser.role !== "worker") {
+      setIsStaffLoginOpen(true);
+      return;
+    }
+    setPortalMode(targetMode);
+  }
+
   // If citizen portal mode is active, render CitizenPortal
   if (portalMode === "citizen") {
     return (
-      <CitizenPortal
-        onSwitchToDashboard={() => setPortalMode("officer")}
-        onSwitchToWorker={() => setPortalMode("worker")}
-        onIssueCreated={handleIssueCreated}
-        existingIssues={issues}
-      />
+      <>
+        <CitizenPortal
+          onSwitchToDashboard={() => handleAttemptPortalSwitch("officer")}
+          onSwitchToWorker={() => handleAttemptPortalSwitch("worker")}
+          onOpenStaffLogin={() => setIsStaffLoginOpen(true)}
+          onIssueCreated={handleIssueCreated}
+          existingIssues={issues}
+        />
+
+        <StaffLoginModal
+          isOpen={isStaffLoginOpen}
+          onClose={() => setIsStaffLoginOpen(false)}
+          onLoginSuccess={handleStaffLoginSuccess}
+        />
+      </>
+    );
+  }
+
+  // If admin portal mode is active, render AdminPortal
+  if (portalMode === "admin") {
+    return (
+      <>
+        <AdminPortal
+          onSwitchToDashboard={() => setPortalMode("officer")}
+          onOpenStaffLogin={() => setIsStaffLoginOpen(true)}
+          onLogout={handleLogout}
+          currentUser={currentUser}
+        />
+
+        <StaffLoginModal
+          isOpen={isStaffLoginOpen}
+          onClose={() => setIsStaffLoginOpen(false)}
+          onLoginSuccess={handleStaffLoginSuccess}
+        />
+      </>
     );
   }
 
   // If worker portal mode is active, render WorkerPortal
   if (portalMode === "worker") {
     return (
-      <WorkerPortal
-        issues={issues}
-        onIssueUpdated={handleIssueUpdated}
-        onSwitchToDashboard={() => setPortalMode("officer")}
-        onSwitchToCitizen={() => setPortalMode("citizen")}
-      />
+      <>
+        <WorkerPortal
+          issues={issues}
+          onIssueUpdated={handleIssueUpdated}
+          onSwitchToDashboard={() => handleAttemptPortalSwitch("officer")}
+          onOpenStaffLogin={() => setIsStaffLoginOpen(true)}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+        />
+
+        <StaffLoginModal
+          isOpen={isStaffLoginOpen}
+          onClose={() => setIsStaffLoginOpen(false)}
+          onLoginSuccess={handleStaffLoginSuccess}
+        />
+      </>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100 font-sans">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100">
       {/* 1. Global Top Navigation Header matching Reference */}
       <TopHeader
         viewMode={viewMode}
@@ -197,12 +297,15 @@ export default function App() {
           setClickedCoords(null);
           setIsReportModalOpen(true);
         }}
-        onSwitchToCitizenPortal={() => setPortalMode("citizen")}
-        onSwitchToWorkerPortal={() => setPortalMode("worker")}
+        onSwitchToWorkerPortal={() => handleAttemptPortalSwitch("worker")}
+        onOpenStaffLogin={() => setIsStaffLoginOpen(true)}
         onOpenQueue={() => setIsQueueModalOpen(true)}
         backendUp={backendUp}
         hasRealDbData={hasRealDbData}
         totalIssuesCount={total}
+        visibleLiveIssueCount={visibleLiveIssueCount}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* 2. Interactive Filter Bar matching reference category tags */}
@@ -212,23 +315,6 @@ export default function App() {
         totalCount={total}
         filteredCount={filteredIssues.length}
       />
-
-      {/* Demo dataset alert banner when offline or backend not providing live MongoDB issues */}
-      {!hasRealDbData && (
-        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-1.5 flex items-center justify-between text-xs text-amber-800">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold uppercase text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded tracking-wider">
-              DEMO DATASET FALLBACK
-            </span>
-            <span>
-              The officer dashboard is displaying an interactive offline demo dataset (8 sample issues). Real submitted issues will appear automatically when connected to the backend.
-            </span>
-          </div>
-          <span className="text-[11px] font-semibold text-amber-900 hidden sm:inline">
-            Status: {backendUp ? 'Database Empty' : 'Backend Disconnected'}
-          </span>
-        </div>
-      )}
 
       {/* 3. Main Workspace Area: Side Details Panel + Full-Screen Map / List */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -242,22 +328,21 @@ export default function App() {
         )}
 
         {/* Center / Right Stage: Full Screen Map or Alternate Table List */}
-        <div className="flex-1 relative h-full flex flex-col overflow-hidden">
+        <div className="flex-1 relative h-full flex flex-col overflow-hidden bg-slate-950">
           {viewMode === "map" ? (
             <CivicMap
               issues={filteredIssues}
               selectedIssue={selectedIssue}
               onSelectIssue={(iss: Issue) => setSelectedIssue(iss)}
-              onOpenReportModal={handleMapClick}
             />
           ) : (
-            <div className="flex-1 p-6 overflow-y-auto bg-slate-50">
+            <div className="flex-1 p-6 overflow-y-auto bg-slate-950">
               <div className="max-w-6xl mx-auto space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-gray-800">
+                  <h2 className="text-base font-bold text-slate-100">
                     All Community Tickets ({filteredIssues.length})
                   </h2>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-slate-400">
                     Click any row to inspect in details panel
                   </span>
                 </div>
@@ -318,6 +403,13 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 6. Staff Login Modal */}
+      <StaffLoginModal
+        isOpen={isStaffLoginOpen}
+        onClose={() => setIsStaffLoginOpen(false)}
+        onLoginSuccess={handleStaffLoginSuccess}
+      />
     </div>
   );
 }

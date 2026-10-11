@@ -9,15 +9,17 @@ import {
 } from 'lucide-react';
 
 const statusColors: Record<Status, string> = {
-  Reported: 'bg-gray-100 text-gray-600 border-gray-200',
-  'Under Review': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  Accepted: 'bg-teal-100 text-teal-700 border-teal-200',
-  Rejected: 'bg-rose-100 text-rose-700 border-rose-200',
-  Assigned: 'bg-purple-100 text-purple-700 border-purple-200',
-  Acknowledged: 'bg-blue-100 text-blue-700 border-blue-200',
-  'In Progress': 'bg-amber-100 text-amber-700 border-amber-200',
-  'Pending Verification': 'bg-orange-100 text-orange-700 border-orange-200',
-  Resolved: 'bg-green-100 text-green-700 border-green-200',
+  Reported: 'bg-slate-800 text-slate-300 border-slate-700',
+  'Under Review': 'bg-indigo-950/80 text-indigo-300 border-indigo-700/60',
+  Accepted: 'bg-teal-950/80 text-teal-300 border-teal-700/60',
+  Rejected: 'bg-rose-950/80 text-rose-300 border-rose-700/60',
+  Assigned: 'bg-purple-950/80 text-purple-300 border-purple-700/60',
+  Acknowledged: 'bg-blue-950/80 text-blue-300 border-blue-700/60',
+  'In Progress': 'bg-amber-950/80 text-amber-300 border-amber-700/60',
+  'Pending Verification': 'bg-orange-950/80 text-orange-300 border-orange-700/60',
+  Resolved: 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60',
+  'Awaiting Citizen Confirmation': 'bg-sky-950/90 text-sky-300 border-sky-600/70 font-semibold',
+  Closed: 'bg-emerald-950/90 text-emerald-300 border-emerald-500/70 font-semibold',
 };
 
 export function CategoryIcon({
