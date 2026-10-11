@@ -201,23 +201,23 @@ export default function ReportModal({
       return resolvedCoords;
     }
 
-    // Try immediate geocoding if user hit submit quickly
-    setIsGeocoding(true);
-    const geo = await geocodeAddress(location.trim());
-    setIsGeocoding(false);
+    // Try immediate geocoding if user hit submit quickly and is online
+    if (connectivity.isOnline()) {
+      setIsGeocoding(true);
+      const geo = await geocodeAddress(location.trim());
+      setIsGeocoding(false);
 
-    if (geo) {
-      setResolvedCoords({ lat: geo.lat, lng: geo.lng });
-      setResolvedAddressName(geo.displayName);
-      setFieldErrors({});
-      return { lat: geo.lat, lng: geo.lng };
+      if (geo) {
+        setResolvedCoords({ lat: geo.lat, lng: geo.lng });
+        setResolvedAddressName(geo.displayName);
+        setFieldErrors({});
+        return { lat: geo.lat, lng: geo.lng };
+      }
     }
 
-    // Location resolution failed: ask user to specify or select a map point instead of silently guessing
-    setFieldErrors({
-      location:
-        'Could not resolve this address or pincode. Please enter a valid area/pincode (e.g. "411038 Pune") or click on the map to drop a pin.',
-    });
+    // Offline or geocoding unavailable: do not block offline submission!
+    // Preserve manual text address without fabricating arbitrary coordinates.
+    setFieldErrors({});
     return null;
   }
 
@@ -225,8 +225,17 @@ export default function ReportModal({
     e.preventDefault();
     setError("");
 
+    // Basic required field validation
+    const errs: Record<string, string> = {};
+    if (!title.trim()) errs.title = "Issue title is required.";
+    if (!description.trim()) errs.description = "Detailed description is required.";
+    if (!location.trim()) errs.location = "Specific location, area, or pincode is required.";
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      return;
+    }
+
     const finalCoords = await validateAndResolveLocation();
-    if (!finalCoords) return;
 
     setSubmitting(true);
     const resolvedCategory = (category ||
@@ -305,7 +314,7 @@ export default function ReportModal({
       const result = await createIssue(fd);
       const enrichedIssue: Issue = {
         ...result.issue,
-        coordinates: finalCoords,
+        coordinates: finalCoords || undefined,
         ticketCode: result.issue.ticketCode || ticketId,
       };
 

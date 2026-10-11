@@ -161,6 +161,9 @@ class SyncEngine {
       fd.append('location', report.location);
       fd.append('clientId', report.clientId);
       fd.append('clientCreatedAt', report.createdAt);
+      if (report.citizenId) {
+        fd.append('citizenId', report.citizenId);
+      }
 
       if (report.ticketCode) {
         fd.append('ticketCode', report.ticketCode);

@@ -3,6 +3,8 @@ import { Issue, IssueFilters, Category, Status } from '../types';
 import { StatusBadge, CategoryBadge, SeverityBar } from './Badges';
 import { MapPin, Calendar, Copy, Search } from 'lucide-react';
 
+import { normalizeCategory } from '../utils/category';
+
 interface Props {
   issues: Issue[];
   filters: IssueFilters;
@@ -20,7 +22,7 @@ export default function IssueTable({ issues, filters, onFiltersChange, onSelect,
   const filtered = issues.filter((issue) => {
     const q = filters.search.toLowerCase();
     if (q && !issue.title.toLowerCase().includes(q) && !issue.location.toLowerCase().includes(q)) return false;
-    if (filters.category && issue.category !== filters.category) return false;
+    if (filters.category && normalizeCategory(issue.category) !== normalizeCategory(filters.category)) return false;
     if (filters.status && issue.status !== filters.status) return false;
     if (issue.severityScore < filters.minSeverity) return false;
     return true;

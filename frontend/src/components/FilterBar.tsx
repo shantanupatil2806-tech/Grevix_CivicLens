@@ -1,5 +1,5 @@
-// frontend/src/components/FilterBar.tsx
 import type { Category, Status, IssueFilters } from '../types';
+import { CategoryIcon } from './Badges';
 import {
   SlidersHorizontal,
   X,
@@ -63,6 +63,7 @@ export default function FilterBar({
                   : 'bg-slate-100/90 text-gray-700 hover:bg-slate-200/80 border border-gray-200/50'
               }`}
             >
+              <CategoryIcon category={cat} size={12} color={isActive ? '#ffffff' : undefined} />
               <span>{cat}</span>
               {isActive && <X size={12} className="opacity-80 hover:opacity-100" />}
             </button>

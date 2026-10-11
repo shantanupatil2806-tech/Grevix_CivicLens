@@ -7,11 +7,14 @@ import IssueDetailSidePanel from "./components/IssueDetailSidePanel";
 import IssueTable from "./components/IssueTable";
 import ReportModal from "./components/ReportModal";
 import CitizenPortal from "./components/CitizenPortal";
+import WorkerPortal from "./components/WorkerPortal";
 import OfflineReportQueue from "./components/OfflineReportQueue";
 import type { Issue, IssueFilters } from "./types";
 import { sampleIssues } from "./data/sampleIssues";
 import { fetchIssues } from "./services/api";
 import { connectivity } from "./services/connectivity";
+import { syncEngine } from "./services/syncEngine";
+import { normalizeCategory } from "./utils/category";
 
 const DEFAULT_FILTERS: IssueFilters = {
   search: "",
@@ -33,7 +36,7 @@ export default function App() {
     lng: number;
   } | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "table">("map");
-  const [portalMode, setPortalMode] = useState<"citizen" | "officer">(
+  const [portalMode, setPortalMode] = useState<"citizen" | "officer" | "worker">(
     "citizen",
   );
 
@@ -96,14 +99,29 @@ export default function App() {
       if (isOnline) void loadIssues();
     });
 
+    // Subscribe to sync engine events at the top level so the officer dashboard
+    // is updated when an offline report syncs — regardless of which portal tab
+    // is currently active (OfflineReportQueue may not be mounted).
+    const unsubSyncEngine = syncEngine.subscribe((event) => {
+      if (event.type === "report-synced" && event.syncedIssue) {
+        handleIssueCreated(event.syncedIssue);
+      }
+    });
+
     return () => {
       isActive = false;
       unsubscribe();
+      unsubSyncEngine();
     };
   }, []);
 
   function handleIssueCreated(newIssue: Issue) {
-    setIssues((prev) => [newIssue, ...prev]);
+    setIssues((prev) => {
+      // Deduplicate: if the issue already exists (e.g. both App-level syncEngine
+      // subscription and OfflineReportQueue.onIssueSynced fire), skip re-insert.
+      if (prev.some((i) => i._id === newIssue._id)) return prev;
+      return [newIssue, ...prev];
+    });
     setSelectedIssue(newIssue);
     if (!newIssue.isDemo) {
       setHasRealDbData(true);
@@ -131,7 +149,7 @@ export default function App() {
     ) {
       return false;
     }
-    if (filters.category && issue.category !== filters.category) return false;
+    if (filters.category && normalizeCategory(issue.category) !== normalizeCategory(filters.category)) return false;
     if (filters.status && issue.status !== filters.status) return false;
     if (issue.severityScore < filters.minSeverity) return false;
     return true;
@@ -150,8 +168,21 @@ export default function App() {
     return (
       <CitizenPortal
         onSwitchToDashboard={() => setPortalMode("officer")}
+        onSwitchToWorker={() => setPortalMode("worker")}
         onIssueCreated={handleIssueCreated}
         existingIssues={issues}
+      />
+    );
+  }
+
+  // If worker portal mode is active, render WorkerPortal
+  if (portalMode === "worker") {
+    return (
+      <WorkerPortal
+        issues={issues}
+        onIssueUpdated={handleIssueUpdated}
+        onSwitchToDashboard={() => setPortalMode("officer")}
+        onSwitchToCitizen={() => setPortalMode("citizen")}
       />
     );
   }
@@ -167,6 +198,7 @@ export default function App() {
           setIsReportModalOpen(true);
         }}
         onSwitchToCitizenPortal={() => setPortalMode("citizen")}
+        onSwitchToWorkerPortal={() => setPortalMode("worker")}
         onOpenQueue={() => setIsQueueModalOpen(true)}
         backendUp={backendUp}
         hasRealDbData={hasRealDbData}
@@ -180,6 +212,23 @@ export default function App() {
         totalCount={total}
         filteredCount={filteredIssues.length}
       />
+
+      {/* Demo dataset alert banner when offline or backend not providing live MongoDB issues */}
+      {!hasRealDbData && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-1.5 flex items-center justify-between text-xs text-amber-800">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold uppercase text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded tracking-wider">
+              DEMO DATASET FALLBACK
+            </span>
+            <span>
+              The officer dashboard is displaying an interactive offline demo dataset (8 sample issues). Real submitted issues will appear automatically when connected to the backend.
+            </span>
+          </div>
+          <span className="text-[11px] font-semibold text-amber-900 hidden sm:inline">
+            Status: {backendUp ? 'Database Empty' : 'Backend Disconnected'}
+          </span>
+        </div>
+      )}
 
       {/* 3. Main Workspace Area: Side Details Panel + Full-Screen Map / List */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -198,7 +247,7 @@ export default function App() {
             <CivicMap
               issues={filteredIssues}
               selectedIssue={selectedIssue}
-              onSelectIssue={(iss) => setSelectedIssue(iss)}
+              onSelectIssue={(iss: Issue) => setSelectedIssue(iss)}
               onOpenReportModal={handleMapClick}
             />
           ) : (

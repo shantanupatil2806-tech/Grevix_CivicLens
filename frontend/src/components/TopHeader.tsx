@@ -15,8 +15,9 @@ import ConnectivityIndicator from './ConnectivityIndicator';
 interface Props {
   viewMode: 'map' | 'table';
   onToggleViewMode: (mode: 'map' | 'table') => void;
-  onOpenNewTicketModal: () => void;
+  onOpenNewTicketModal?: () => void;
   onSwitchToCitizenPortal?: () => void;
+  onSwitchToWorkerPortal?: () => void;
   onOpenQueue?: () => void;
   backendUp: boolean | null;
   hasRealDbData: boolean;
@@ -28,6 +29,7 @@ export default function TopHeader({
   onToggleViewMode,
   onOpenNewTicketModal,
   onSwitchToCitizenPortal,
+  onSwitchToWorkerPortal,
   onOpenQueue,
   backendUp,
   hasRealDbData,
@@ -114,6 +116,17 @@ export default function TopHeader({
           </div>
         </div>
 
+        {/* Worker Portal Switch */}
+        {onSwitchToWorkerPortal && (
+          <button
+            onClick={onSwitchToWorkerPortal}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 text-xs font-semibold rounded-lg border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Open Maintenance Worker Portal"
+          >
+            <span>Worker Portal</span>
+          </button>
+        )}
+
         {/* Citizen Portal Switch */}
         {onSwitchToCitizenPortal && (
           <button
@@ -125,15 +138,6 @@ export default function TopHeader({
             <span className="hidden sm:inline">Citizen Portal</span>
           </button>
         )}
-
-        {/* New Ticket Button matching reference [+ New Ticket] */}
-        <button
-          onClick={onOpenNewTicketModal}
-          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-all shadow-sm flex items-center gap-1.5 cursor-pointer hover:shadow-blue-500/20"
-        >
-          <Plus size={15} />
-          <span>+ New Ticket</span>
-        </button>
       </div>
     </header>
   );

@@ -10,6 +10,8 @@ const fs = require('fs');
 dotenv.config();
 
 const issueRoutes = require('./routes/issueRoutes');
+const authRoutes = require('./routes/authRoutes');
+const { seedDefaultUsers } = require('./models/User');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,6 +34,7 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/issues', issueRoutes);
 
 // 404 handler
@@ -46,8 +49,9 @@ app.use((err, req, res, next) => {
 // Connect to MongoDB and start
 mongoose
   .connect(MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('✅ MongoDB connected');
+    await seedDefaultUsers();
     app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
   })
   .catch((err) => {

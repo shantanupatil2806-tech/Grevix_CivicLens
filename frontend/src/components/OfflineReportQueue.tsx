@@ -9,7 +9,14 @@ import {
 } from '../services/offlineDb';
 import { syncEngine } from '../services/syncEngine';
 import { connectivity } from '../services/connectivity';
-import { CategoryBadge } from './Badges';
+import { CategoryBadge, StatusBadge } from './Badges';
+import {
+  getCitizenId,
+  setCitizenId,
+  createNewCitizenProfile,
+  getKnownCitizenProfiles,
+  subscribeCitizen
+} from '../services/citizenSession';
 import {
   RefreshCw,
   Trash2,
@@ -22,15 +29,27 @@ import {
   Eye,
   X,
   Check,
-  AlertCircle
+  AlertCircle,
+  Shield,
+  User,
+  ExternalLink,
+  ChevronRight,
+  Plus
 } from 'lucide-react';
 
 interface Props {
   onIssueSynced?: (issue: Issue) => void;
   onClose?: () => void;
+  existingIssues?: Issue[];
+  onTrackTicket?: (ticketCode: string) => void;
 }
 
-export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
+export default function OfflineReportQueue({
+  onIssueSynced,
+  onClose,
+  existingIssues = [],
+  onTrackTicket
+}: Props) {
   const [reports, setReports] = useState<OfflineReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncingReportId, setSyncingReportId] = useState<string | null>(null);
@@ -38,6 +57,11 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
   const [editingReport, setEditingReport] = useState<OfflineReport | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [reviewConfirmReport, setReviewConfirmReport] = useState<OfflineReport | null>(null);
+
+  // Citizen Isolation State
+  const [currentCitizenId, setCurrentCitizenId] = useState(getCitizenId());
+  const [knownProfiles, setKnownProfiles] = useState<string[]>(getKnownCitizenProfiles());
+  const [isSwitchingProfile, setIsSwitchingProfile] = useState(false);
 
   // Edit form state
   const [editTitle, setEditTitle] = useState('');
@@ -47,10 +71,11 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
   // Queue View Tab Filter: default to 'all' so users see all locally buffered reports immediately
   const [viewFilter, setViewFilter] = useState<'pending' | 'synced' | 'all'>('all');
 
-  const loadReports = async () => {
+  const loadReports = async (targetCitizenId?: string) => {
     try {
       setLoading(true);
-      const data = await getAllOfflineReports();
+      const activeId = targetCitizenId || getCitizenId();
+      const data = await getAllOfflineReports(activeId);
       setReports(data);
     } finally {
       setLoading(false);
@@ -58,14 +83,20 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
   };
 
   useEffect(() => {
-    loadReports();
+    loadReports(currentCitizenId);
 
     const unsubDb = subscribeOfflineDb(() => {
-      loadReports();
+      loadReports(currentCitizenId);
+    });
+
+    const unsubCitizen = subscribeCitizen((newId) => {
+      setCurrentCitizenId(newId);
+      setKnownProfiles(getKnownCitizenProfiles());
+      loadReports(newId);
     });
 
     const unsubSync = syncEngine.subscribe((event) => {
-      loadReports();
+      loadReports(currentCitizenId);
       if (event.type === 'report-synced' && event.syncedIssue && onIssueSynced) {
         onIssueSynced(event.syncedIssue);
       }
@@ -73,9 +104,23 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
 
     return () => {
       unsubDb();
+      unsubCitizen();
       unsubSync();
     };
-  }, []);
+  }, [currentCitizenId]);
+
+  const handleSwitchCitizen = (profileId: string) => {
+    setCitizenId(profileId);
+    setCurrentCitizenId(profileId);
+    setIsSwitchingProfile(false);
+  };
+
+  const handleCreateNewCitizen = () => {
+    const newId = createNewCitizenProfile();
+    setCurrentCitizenId(newId);
+    setKnownProfiles(getKnownCitizenProfiles());
+    setIsSwitchingProfile(false);
+  };
 
   const handleManualSync = async (clientId: string) => {
     setSyncingReportId(clientId);
@@ -216,18 +261,74 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-100">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-gray-900">Offline Report Queue</h2>
-            <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-blue-100 text-blue-800">
-              {pendingCount} Pending / {reports.length} Total
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold text-gray-900">My Submitted Reports</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-blue-100 text-blue-800">
+              {pendingCount} Pending Sync / {reports.length} Total on Device
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            Reports stored securely on this device. Pending reports will synchronize automatically when connection is verified.
+            Private reports recorded on this device for your account. Other citizens cannot view your submissions.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Citizen Profile Isolation Badge & Switcher */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <button
+              onClick={() => setIsSwitchingProfile(!isSwitchingProfile)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition-colors shadow-2xs cursor-pointer"
+              title="Click to switch or test citizen profile isolation"
+            >
+              <Shield size={13} className="text-blue-600" />
+              <span>Profile: {currentCitizenId}</span>
+              <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded font-semibold">Isolated</span>
+            </button>
+
+            {isSwitchingProfile && (
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 p-3 z-30 space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between pb-1 border-b border-gray-100">
+                  <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                    <User size={13} />
+                    <span>Citizen Device Profiles</span>
+                  </span>
+                  <button
+                    onClick={() => setIsSwitchingProfile(false)}
+                    className="text-gray-400 hover:text-gray-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  Switch citizen identity to test that issues reported by one citizen are strictly invisible to another.
+                </p>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {knownProfiles.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => handleSwitchCitizen(p)}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between cursor-pointer ${
+                        p === currentCitizenId
+                          ? 'bg-blue-50 text-blue-700 font-bold border border-blue-200'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span className="font-mono">{p}</span>
+                      {p === currentCitizenId && <Check size={12} className="text-blue-600" />}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={handleCreateNewCitizen}
+                  className="w-full mt-2 py-1.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                >
+                  <Plus size={13} />
+                  <span>New Citizen Profile (Test Isolation)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {pendingCount > 0 && (
             <button
               onClick={handleSyncAll}
@@ -249,6 +350,17 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
         </div>
       </div>
 
+      {/* Strict Privacy Isolation Notice Banner */}
+      <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5">
+        <Shield size={16} className="text-blue-600 shrink-0 mt-0.5" />
+        <div className="space-y-0.5">
+          <p className="font-bold text-blue-950">Strict Citizen Privacy &amp; Device Isolation</p>
+          <p className="text-blue-800">
+            Issues reported by you are tied to your unique citizen session (<strong>{currentCitizenId}</strong>) and cached securely on your device. Other citizens cannot view your submissions.
+          </p>
+        </div>
+      </div>
+
       {/* Tabs: Distinct Pending vs Synced view */}
       <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
         <button
@@ -260,7 +372,7 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
           }`}
         >
           <CloudUpload size={13} />
-          <span>Pending &amp; Action Required ({pendingCount})</span>
+          <span>Pending &amp; Offline ({pendingCount})</span>
         </button>
 
         <button
@@ -272,7 +384,7 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
           }`}
         >
           <CheckCircle2 size={13} />
-          <span>Synced ({syncedCount})</span>
+          <span>Synced with City ({syncedCount})</span>
         </button>
 
         <button
@@ -283,21 +395,8 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
               : 'text-gray-600 hover:bg-gray-100'
           }`}
         >
-          <span>All ({reports.length})</span>
+          <span>All My Reports ({reports.length})</span>
         </button>
-      </div>
-
-      {/* Notice Banner */}
-      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-start gap-2.5">
-        <AlertCircle size={16} className="text-blue-600 shrink-0 mt-0.5" />
-        <div className="space-y-0.5">
-          <p className="font-semibold text-slate-900">Local Device Buffer Notice</p>
-          <p className="text-slate-600">
-            Reports marked <strong className="text-slate-800">Saved Offline</strong> or{' '}
-            <strong className="text-slate-800">Pending Sync</strong> exist only on your phone/browser.
-            They have not reached CivicLens municipal officers yet until confirmed.
-          </p>
-        </div>
       </div>
 
       {/* Reports List */}
@@ -314,14 +413,14 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
               ? 'No Pending Reports'
               : viewFilter === 'synced'
               ? 'No Synced Reports'
-              : 'No Offline Reports in Queue'}
+              : 'No Reports Found for this Citizen'}
           </p>
           <p className="text-xs text-gray-400 max-w-sm mx-auto">
             {viewFilter === 'pending'
               ? 'All local reports have been synchronized with the civic backend.'
               : viewFilter === 'synced'
               ? 'Synchronized reports will appear here once confirmed by the server.'
-              : 'No offline reports currently stored on this device.'}
+              : `You haven't submitted any reports under citizen profile ${currentCitizenId} yet.`}
           </p>
         </div>
       ) : (
@@ -330,21 +429,35 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
             const isSynced = report.syncStatus === 'Synced';
             const isStale = syncEngine.isStale(report) && !isSynced;
 
+            // Cross-reference existingIssues to show live municipal status
+            const liveIssue = existingIssues.find(
+              (iss) =>
+                (report.ticketCode && iss.ticketCode?.toLowerCase() === report.ticketCode.toLowerCase()) ||
+                (report.serverIssueId && iss._id === report.serverIssueId) ||
+                (iss as any).clientId === report.clientId
+            );
+
             return (
               <div
                 key={report.clientId}
                 className={`p-4 rounded-xl border transition-all ${
                   isSynced
-                    ? 'bg-gray-50/50 border-gray-200 opacity-90'
+                    ? 'bg-gray-50/50 border-gray-200 hover:border-blue-300'
                     : 'bg-white border-gray-200 hover:border-blue-300 shadow-2xs'
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1 flex-1 min-w-[240px]">
+                  <div className="space-y-1.5 flex-1 min-w-[240px]">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="font-bold text-sm text-gray-900">{report.title}</h4>
                       <CategoryBadge category={report.category} />
                       {getStatusBadge(report.syncStatus, report)}
+                      {liveIssue && (
+                        <div className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">Resolution:</span>
+                          <StatusBadge status={liveIssue.status} />
+                        </div>
+                      )}
                       <span className="text-[11px] text-gray-400 flex items-center gap-1">
                         <Clock size={11} /> {formatAge(report.createdAt)}
                       </span>
@@ -361,21 +474,42 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
                           [{report.coordinates.lat.toFixed(4)}, {report.coordinates.lng.toFixed(4)}]
                         </span>
                       )}
-                      <span>
-                        <strong>Type:</strong> {report.locationType}
-                      </span>
                       {report.photoBlob && (
                         <span className="text-blue-600 font-semibold">• Has Photo Evidence</span>
                       )}
                     </div>
 
-                    {/* Server ID confirmation */}
-                    {isSynced && report.serverIssueId && (
-                      <p className="text-[11px] text-emerald-700 font-semibold pt-1 flex items-center gap-1">
-                        <Check size={12} />
-                        Report synced successfully. Issue ID: {report.serverIssueId}
-                        {report.ticketCode && ` (${report.ticketCode})`}
-                      </p>
+                    {/* Server ID confirmation and live assignment details */}
+                    {isSynced && (
+                      <div className="space-y-1 pt-1">
+                        <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                          <Check size={12} />
+                          Report confirmed in city records. Ticket ID:{' '}
+                          <span className="font-mono bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-800">
+                            {report.ticketCode || report.serverIssueId}
+                          </span>
+                        </p>
+                        {liveIssue && (liveIssue.assignedWorkerName || liveIssue.deadline) && (
+                          <div className="p-2 rounded-lg bg-blue-50/60 border border-blue-200/70 text-[11px] text-blue-900 space-y-0.5">
+                            {liveIssue.assignedWorkerName && (
+                              <p>
+                                <strong>Assigned Maintenance Crew:</strong> {liveIssue.assignedWorkerName}
+                                {liveIssue.assignedDepartment ? ` (${liveIssue.assignedDepartment})` : ''}
+                              </p>
+                            )}
+                            {liveIssue.deadline && (
+                              <p>
+                                <strong>Target Resolution Deadline:</strong>{' '}
+                                {new Date(liveIssue.deadline).toLocaleDateString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {/* Last sync error message */}
@@ -389,6 +523,18 @@ export default function OfflineReportQueue({ onIssueSynced, onClose }: Props) {
 
                   {/* Actions Column */}
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Direct Track Button if synced */}
+                    {isSynced && onTrackTicket && (report.ticketCode || report.serverIssueId) && (
+                      <button
+                        onClick={() => onTrackTicket(report.ticketCode || report.serverIssueId || '')}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                        title="View resolution progress timeline"
+                      >
+                        <ChevronRight size={13} />
+                        <span>Track Timeline</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => setSelectedReport(report)}
                       className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"

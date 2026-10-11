@@ -7,12 +7,14 @@ import { runFullClientAnalysis } from '../services/analysis';
 import { saveOfflineReport } from '../services/offlineDb';
 import { connectivity } from '../services/connectivity';
 import { syncEngine } from '../services/syncEngine';
+import { getCitizenId, subscribeCitizen } from '../services/citizenSession';
 import OfflineReportQueue from './OfflineReportQueue';
 import ConnectivityIndicator from './ConnectivityIndicator';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   ShieldAlert,
+  Shield,
   Search,
   PlusCircle,
   MapPin,
@@ -32,6 +34,7 @@ import {
 
 interface Props {
   onSwitchToDashboard: () => void;
+  onSwitchToWorker?: () => void;
   onIssueCreated: (issue: Issue) => void;
   existingIssues: Issue[];
 }
@@ -75,10 +78,19 @@ function CitizenMapController({ center }: { center: [number, number] }) {
 
 export default function CitizenPortal({
   onSwitchToDashboard,
+  onSwitchToWorker,
   onIssueCreated,
   existingIssues
 }: Props) {
   const [activeTab, setActiveTab] = useState<CitizenTab>('home');
+  const [currentCitizenId, setCurrentCitizenId] = useState(getCitizenId());
+
+  // Subscribe to citizen profile changes (for testing isolation)
+  useEffect(() => {
+    return subscribeCitizen((newId) => {
+      setCurrentCitizenId(newId);
+    });
+  }, []);
 
   // Reporting Form State
   const [title, setTitle] = useState('');
@@ -101,6 +113,7 @@ export default function CitizenPortal({
 
   // AI analysis state
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Submission & Confirmation State
   const [submitting, setSubmitting] = useState(false);
@@ -144,29 +157,33 @@ export default function CitizenPortal({
   useEffect(() => {
     if (!title.trim() && !description.trim()) {
       setAnalysis(null);
+      setIsAnalyzing(false);
       return;
     }
 
+    setIsAnalyzing(true);
     const timer = setTimeout(async () => {
       try {
         const preview = await analyzeIssuePreview({
-          title,
-          description,
+          title: title.trim(),
+          description: description.trim(),
           category: category || undefined,
-          location: location || undefined
+          location: location.trim() || undefined
         });
         setAnalysis(preview);
         if (!category && preview.category) {
           setCategory(preview.category);
         }
       } catch {
-        const fallback = runFullClientAnalysis(title, description, category, location, existingIssues);
+        const fallback = runFullClientAnalysis(title.trim(), description.trim(), category, location.trim(), existingIssues);
         setAnalysis(fallback);
         if (!category && fallback.category) {
           setCategory(fallback.category);
         }
+      } finally {
+        setIsAnalyzing(false);
       }
-    }, 400);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [title, description, category, location, existingIssues]);
@@ -221,6 +238,7 @@ export default function CitizenPortal({
 
     const baseOfflineRecord: OfflineReport = {
       clientId: clientUuid,
+      citizenId: currentCitizenId,
       title: title.trim(),
       description: description.trim(),
       category: resolvedCat,
@@ -255,7 +273,7 @@ export default function CitizenPortal({
       }
     }
 
-    // Try submitting online with clientId
+    // Try submitting online with clientId + citizenId
     try {
       const fd = new FormData();
       fd.append('title', title.trim());
@@ -265,6 +283,7 @@ export default function CitizenPortal({
       fd.append('ticketCode', ticketId);
       fd.append('clientId', clientUuid);
       fd.append('clientCreatedAt', baseOfflineRecord.createdAt);
+      fd.append('citizenId', currentCitizenId);
 
       if (coordsToSave) {
         fd.append('latitude', String(coordsToSave.lat));
@@ -281,9 +300,22 @@ export default function CitizenPortal({
         ticketCode: res.issue.ticketCode || ticketId
       };
 
-      // Online submission succeeded — do NOT write to the offline queue.
-      // The queue is exclusively for reports that were saved locally while
-      // offline or when the server was unreachable.
+      // Online submission succeeded — ALSO save to IndexedDB with 'Synced' status.
+      // This ensures "My Reports" shows ALL reports by this citizen (online + offline).
+      try {
+        await saveOfflineReport({
+          ...baseOfflineRecord,
+          citizenId: currentCitizenId,
+          syncStatus: 'Synced',
+          serverIssueId: newIssue._id,
+          ticketCode: newIssue.ticketCode || ticketId,
+          photoBlob: null,   // already uploaded to server
+          photoName: null
+        });
+      } catch {
+        // Non-fatal: issue confirmed online, just won't appear in local My Reports cache
+      }
+
       onIssueCreated(newIssue);
       setConfirmedIssue(newIssue);
     } catch (apiErr: any) {
@@ -361,9 +393,13 @@ export default function CitizenPortal({
         const res = await fetchIssues({ search: query });
         if (res.issues && res.issues.length > 0) {
           const exact = res.issues.find(
-            (i) => i.ticketCode?.toLowerCase() === query.toLowerCase() || i._id === query
+            (i) => i.ticketCode?.toLowerCase() === query.toLowerCase() || i._id.toLowerCase() === query.toLowerCase()
           );
-          setTrackedIssue(exact || res.issues[0]);
+          if (exact) {
+            setTrackedIssue(exact);
+          } else {
+            setTrackError(`No report found matching ticket ID or tracking code "${query}".`);
+          }
         } else {
           setTrackError(`No report found matching ticket ID or tracking code "${query}".`);
         }
@@ -456,6 +492,17 @@ export default function CitizenPortal({
             <div className="h-5 w-px bg-gray-200 mx-1 sm:mx-2" />
 
             <ConnectivityIndicator onOpenQueue={() => setActiveTab('queue')} />
+
+            {/* Switch to Worker Portal */}
+            {onSwitchToWorker && (
+              <button
+                onClick={onSwitchToWorker}
+                className="px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Open Maintenance Worker Portal"
+              >
+                <span>Worker Portal</span>
+              </button>
+            )}
 
             {/* Switch to Officer Dashboard */}
             <button
@@ -957,25 +1004,49 @@ export default function CitizenPortal({
                       </div>
 
                       {/* AI Assistance Badge */}
-                      {analysis && (
-                        <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 text-xs space-y-2">
-                          <div className="flex items-center gap-1.5 font-bold text-blue-800">
+                      <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 text-xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-blue-900">
                             <Sparkles size={14} className="text-blue-600" />
                             <span>AI Initial Priority Assessment</span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600">Predicted Urgency Score:</span>
-                            <span className="font-bold text-blue-700 bg-white px-2 py-0.5 rounded-md border border-blue-200">
-                              {analysis.severityScore}/100 ({analysis.severityLabel})
+                          {isAnalyzing && (
+                            <span className="text-[10px] text-blue-600 font-medium animate-pulse">
+                              Assessing urgency...
                             </span>
-                          </div>
-                          {analysis.duplicate && (
-                            <p className="text-amber-700 text-[11px] font-medium bg-amber-50 p-2 rounded-lg border border-amber-200">
-                              ℹ️ A similar ticket in this vicinity was reported: &ldquo;{analysis.duplicate.title}&rdquo;.
-                            </p>
                           )}
                         </div>
-                      )}
+
+                        {analysis ? (
+                          <>
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-gray-600">Predicted Urgency Score:</span>
+                              <span className="font-bold text-blue-700 bg-white px-2.5 py-0.5 rounded-md border border-blue-200 shadow-2xs font-mono">
+                                {analysis.severityScore}/100 ({analysis.severityLabel})
+                              </span>
+                            </div>
+
+                            {analysis.category && (
+                              <div className="flex items-center justify-between text-[11px] text-gray-500">
+                                <span>Detected Domain:</span>
+                                <span className="font-semibold text-gray-700 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                  {analysis.category}
+                                </span>
+                              </div>
+                            )}
+
+                            {analysis.duplicate && (
+                              <p className="text-amber-800 text-[11px] font-medium bg-amber-50 p-2 rounded-lg border border-amber-200">
+                                ℹ️ A similar ticket in this vicinity was reported: &ldquo;{analysis.duplicate.title}&rdquo;.
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-[11px] text-gray-500 pt-1">
+                            Enter issue title or description above to see real-time AI category detection and urgency severity scoring.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1103,6 +1174,34 @@ export default function CitizenPortal({
                       )}
                     </div>
 
+                    {/* Assigned Crew & Target Deadline (Visible to Citizen) */}
+                    {(trackedIssue.deadline || trackedIssue.assignedWorkerName) && (
+                      <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200/80 space-y-1.5 text-xs">
+                        <div className="flex items-center gap-1.5 font-bold text-blue-900">
+                          <CheckCircle2 size={14} className="text-blue-600" />
+                          <span>Field Action Scheduled</span>
+                        </div>
+                        {trackedIssue.assignedWorkerName && (
+                          <p className="text-blue-800">
+                            <strong>Maintenance Crew:</strong> {trackedIssue.assignedWorkerName}
+                            {trackedIssue.assignedDepartment ? ` (${trackedIssue.assignedDepartment})` : ''}
+                          </p>
+                        )}
+                        {trackedIssue.deadline && (
+                          <p className="text-blue-900 font-semibold flex items-center gap-1">
+                            <span>📅 Estimated Resolution Target:</span>
+                            <span className="bg-white px-2 py-0.5 rounded border border-blue-200 text-blue-800 font-bold">
+                              {new Date(trackedIssue.deadline).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              })}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {/* Photos */}
                     {trackedIssue.photos && trackedIssue.photos.length > 0 && (
                       <div>
@@ -1174,6 +1273,16 @@ export default function CitizenPortal({
           <OfflineReportQueue
             onIssueSynced={(issue) => {
               onIssueCreated(issue);
+            }}
+            existingIssues={existingIssues}
+            onTrackTicket={(ticketCode) => {
+              setSearchQuery(ticketCode);
+              setActiveTab('track');
+              // Auto-search for it
+              const match = existingIssues.find(
+                (iss) => iss.ticketCode?.toLowerCase() === ticketCode.toLowerCase() || iss._id === ticketCode
+              );
+              if (match) setTrackedIssue(match);
             }}
           />
         )}

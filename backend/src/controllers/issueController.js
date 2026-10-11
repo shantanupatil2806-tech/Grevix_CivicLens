@@ -33,10 +33,13 @@ const upload = multer({
 exports.uploadMiddleware = upload.single('photo');
 
 function isOfficer(req) { return req.user && req.user.role === 'officer'; }
+function isWorkerOrOfficer(req) { return req.user && (req.user.role === 'officer' || req.user.role === 'worker'); }
 
 function sanitizeIssue(issue, req) {
   const obj = issue.toObject ? issue.toObject() : { ...issue };
-  if (!isOfficer(req)) { delete obj.reporter; delete obj.internalInstructions; }
+  if (!isOfficer(req)) { delete obj.reporter; }
+  // internalInstructions are visible to field workers and officers
+  if (!isWorkerOrOfficer(req) && req.user) { delete obj.internalInstructions; }
   return obj;
 }
 
@@ -48,7 +51,7 @@ function buildPhotoUrl(req, filename) {
 
 exports.createIssue = async (req, res, next) => {
   try {
-    const { title, description, category: rawCategory, location, latitude, longitude, severity, reporterName, reporterContact, clientId, clientCreatedAt, ticketCode } = req.body;
+    const { title, description, category: rawCategory, location, latitude, longitude, severity, reporterName, reporterContact, clientId, clientCreatedAt, ticketCode, citizenId } = req.body;
     if (!title || !description || !location) return res.status(400).json({ error: 'title, description and location are required.' });
 
     // Idempotency: if clientId provided, check for existing issue
@@ -66,6 +69,11 @@ exports.createIssue = async (req, res, next) => {
       location: location.trim(), severity: severity || 'Medium', status: 'Reported',
       reporter: { name: reporterName ? reporterName.trim() : 'Anonymous', contact: reporterContact ? reporterContact.trim() : '' }
     };
+
+    if (citizenId && citizenId.trim()) {
+      issueData.citizenId = citizenId.trim();
+      issueData.reporter.citizenId = citizenId.trim();
+    }
 
     // Offline sync metadata
     if (clientId) issueData.clientId = clientId;
@@ -104,8 +112,9 @@ exports.createIssue = async (req, res, next) => {
 
 exports.getIssues = async (req, res, next) => {
   try {
-    const { category, severity, status, search, limit = 200 } = req.query;
+    const { category, severity, status, search, citizenId, limit = 200 } = req.query;
     const filter = {};
+    if (citizenId) filter.citizenId = citizenId.trim();
     if (category) filter.category = normalizeCategory(category);
     if (severity) filter.severity = severity;
     if (status) filter.status = status;

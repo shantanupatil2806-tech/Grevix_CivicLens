@@ -74,8 +74,10 @@ const IssueSchema = new mongoose.Schema({
   // Private reporter info (only accessible to officers)
   reporter: {
     name: { type: String, default: 'Anonymous Citizen' },
-    contact: { type: String, default: '' }
+    contact: { type: String, default: '' },
+    citizenId: { type: String, default: null }
   },
+  citizenId: { type: String, default: null, index: true },
   // Assignment & Officer Workflow
   assignedWorker: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   assignedWorkerName: { type: String, default: null },
@@ -113,7 +115,7 @@ const IssueSchema = new mongoose.Schema({
   statusHistory: [StatusHistorySchema],
 
   // Offline sync support
-  clientId: { type: String, default: null },          // Client-generated UUID for idempotency
+  clientId: { type: String, default: undefined },       // Client-generated UUID for idempotency (undefined avoids duplicate null keys in sparse index)
   serverReceivedAt: { type: Date, default: null },    // When server first received this report
   clientCreatedAt: { type: Date, default: null },     // Original creation time from client device
 

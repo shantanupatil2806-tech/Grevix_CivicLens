@@ -19,9 +19,16 @@ import {
   FileCheck2,
   AlertTriangle
 } from 'lucide-react';
-import { updateIssueStatus } from '../services/api';
+import { updateIssueStatus, assignIssueWorker } from '../services/api';
+import { User, Calendar as CalendarIcon } from 'lucide-react';
 
 const STATUSES: Status[] = ['Reported', 'Acknowledged', 'In Progress', 'Resolved'];
+
+const CREW_WORKERS = [
+  { id: 'w1', name: 'Ramesh Kumar', department: 'Roads & Infrastructure' },
+  { id: 'w2', name: 'Suresh Patel', department: 'Water & Sewage' },
+  { id: 'w3', name: 'Sunita Sharma', department: 'Solid Waste & Sanitation' }
+];
 
 interface Props {
   issue: Issue;
@@ -33,6 +40,14 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
   const [commentText, setCommentText] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [activePhoto, setActivePhoto] = useState<string | null>(null);
+
+  // Assign worker & deadline form state
+  const [selectedWorkerName, setSelectedWorkerName] = useState(issue.assignedWorkerName || '');
+  const [deadlineDate, setDeadlineDate] = useState(
+    issue.deadline ? new Date(issue.deadline).toISOString().split('T')[0] : ''
+  );
+  const [instructionsText, setInstructionsText] = useState(issue.internalInstructions || '');
+  const [assignSuccessMsg, setAssignSuccessMsg] = useState('');
 
   // Dynamic priority score and factors calculated directly from this issue's data
   const dynamicSeverity = useMemo(() => {
@@ -54,6 +69,83 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
     : issue.imagePath
     ? [issue.imagePath]
     : [];
+
+  async function handleAssignWorkerSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedWorkerName) return;
+
+    setIsUpdating(true);
+    setAssignSuccessMsg('');
+
+    const workerObj = CREW_WORKERS.find((w) => w.name === selectedWorkerName);
+    const department = workerObj ? workerObj.department : issue.assignedDepartment || '';
+
+    try {
+      if (issue.isDemo) {
+        const updated: Issue = {
+          ...issue,
+          assignedWorkerName: selectedWorkerName,
+          assignedDepartment: department,
+          deadline: deadlineDate ? new Date(deadlineDate).toISOString() : undefined,
+          internalInstructions: instructionsText.trim() || undefined,
+          status: 'Assigned',
+          statusHistory: [
+            ...(issue.statusHistory || []),
+            {
+              status: 'Assigned',
+              timestamp: new Date().toISOString(),
+              note: `Assigned to ${selectedWorkerName} (${department})${deadlineDate ? ` with deadline ${deadlineDate}` : ''}`,
+              updatedBy: 'Municipal Dispatch Lead'
+            }
+          ]
+        };
+        onUpdate(updated);
+        setAssignSuccessMsg('Assigned successfully! 👷');
+      } else {
+        const updated = await assignIssueWorker(issue._id, {
+          workerName: selectedWorkerName,
+          department,
+          deadline: deadlineDate ? new Date(deadlineDate).toISOString() : undefined,
+          internalInstructions: instructionsText.trim() || undefined
+        });
+        const merged: Issue = {
+          ...issue,
+          ...updated,
+          assignedWorkerName: selectedWorkerName,
+          assignedDepartment: department,
+          deadline: deadlineDate ? new Date(deadlineDate).toISOString() : issue.deadline,
+          internalInstructions: instructionsText.trim() || issue.internalInstructions,
+          status: 'Assigned'
+        };
+        onUpdate(merged);
+        setAssignSuccessMsg('Assigned successfully! 👷');
+      }
+    } catch (err: any) {
+      // Fallback optimistic update
+      const fallback: Issue = {
+        ...issue,
+        assignedWorkerName: selectedWorkerName,
+        assignedDepartment: department,
+        deadline: deadlineDate ? new Date(deadlineDate).toISOString() : undefined,
+        internalInstructions: instructionsText.trim() || undefined,
+        status: 'Assigned',
+        statusHistory: [
+          ...(issue.statusHistory || []),
+          {
+            status: 'Assigned',
+            timestamp: new Date().toISOString(),
+            note: `Assigned to ${selectedWorkerName} (${department})`,
+            updatedBy: 'Municipal Dispatch Lead'
+          }
+        ]
+      };
+      onUpdate(fallback);
+      setAssignSuccessMsg('Assigned locally! 👷');
+    } finally {
+      setIsUpdating(false);
+      setTimeout(() => setAssignSuccessMsg(''), 4000);
+    }
+  }
 
   async function handleAddCommentOrStatus(newStatus?: Status) {
     const targetStatus = newStatus || issue.status;
@@ -81,8 +173,14 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
     }
 
     try {
-      const updated = await updateIssueStatus(issue._id, targetStatus, note);
-      onUpdate(updated);
+      const serverUpdated = await updateIssueStatus(issue._id, targetStatus, note);
+      const safeUpdated: Issue = {
+        ...issue,
+        ...serverUpdated,
+        ticketCode: serverUpdated?.ticketCode || issue.ticketCode,
+        coordinates: serverUpdated?.coordinates || issue.coordinates
+      };
+      onUpdate(safeUpdated);
       setCommentText('');
     } catch {
       const fallback: Issue = {
@@ -170,7 +268,7 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
 
           <div className="flex justify-between items-center gap-3 pt-1 border-t border-gray-200/50">
             <span className="text-gray-400 font-medium shrink-0">Incident Type</span>
-            <span className="text-gray-900 font-bold">{issue.category}</span>
+            <CategoryBadge category={issue.category} />
           </div>
 
           <div className="flex justify-between items-center gap-3 pt-1 border-t border-gray-200/50">
@@ -179,6 +277,33 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
               {issue.status === 'In Progress' ? 'Emergency Repair Underway' : issue.status}
             </span>
           </div>
+
+          <div className="flex justify-between items-center gap-3 pt-1 border-t border-gray-200/50">
+            <span className="text-gray-400 font-medium shrink-0">Assigned Worker</span>
+            <span className="text-gray-800 font-bold">
+              {issue.assignedWorkerName ? (
+                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  {issue.assignedWorkerName} {issue.assignedDepartment ? `(${issue.assignedDepartment})` : ''}
+                </span>
+              ) : (
+                <span className="text-gray-400 italic font-normal">Unassigned</span>
+              )}
+            </span>
+          </div>
+
+          {issue.deadline && (
+            <div className="flex justify-between items-center gap-3 pt-1 border-t border-gray-200/50">
+              <span className="text-gray-400 font-medium shrink-0">Target Deadline</span>
+              <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                <Calendar size={11} />
+                {new Date(issue.deadline).toLocaleDateString('en-US', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric'
+                })}
+              </span>
+            </div>
+          )}
 
           <div className="flex justify-between items-center gap-3 pt-1 border-t border-gray-200/50">
             <span className="text-gray-400 font-medium shrink-0">Last Updated Date</span>
@@ -194,12 +319,12 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
 
         {/* Transparent Rule-Based Priority Scoring Breakdown */}
         <div className="p-4 bg-gradient-to-br from-indigo-50/70 to-blue-50/50 rounded-xl border border-indigo-100/80 space-y-2.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start sm:items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-indigo-900 font-bold text-xs uppercase tracking-wide">
-              <Sparkles size={14} className="text-indigo-600" />
+              <Sparkles size={14} className="text-indigo-600 shrink-0" />
               <span>Priority Scoring Breakdown (Rule-Based)</span>
             </div>
-            <span className="text-xs font-extrabold px-2 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200 shadow-2xs">
+            <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 shadow-2xs shrink-0 whitespace-nowrap text-center leading-none">
               Score: {activeScore}/100
             </span>
           </div>
@@ -289,6 +414,99 @@ export default function IssueDetailSidePanel({ issue, onClose, onUpdate }: Props
                 <X size={18} />
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Officer Assignment, Deadline & Instructions Card */}
+        <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200/80 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+              <User size={14} className="text-amber-600" /> Assign Worker &amp; Target Deadline
+            </span>
+            {assignSuccessMsg && (
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full animate-fadeIn">
+                {assignSuccessMsg}
+              </span>
+            )}
+          </div>
+
+          <form onSubmit={handleAssignWorkerSubmit} className="space-y-2.5">
+            <div>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                Field Maintenance Crew / Worker:
+              </label>
+              <select
+                value={selectedWorkerName}
+                onChange={(e) => setSelectedWorkerName(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold"
+              >
+                <option value="">Select crew member...</option>
+                {CREW_WORKERS.map((w) => (
+                  <option key={w.id} value={w.name}>
+                    {w.name} ({w.department})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                Target Resolution Deadline:
+              </label>
+              <input
+                type="date"
+                value={deadlineDate}
+                onChange={(e) => setDeadlineDate(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                Officer Instructions (Visible to Worker):
+              </label>
+              <textarea
+                rows={2}
+                value={instructionsText}
+                onChange={(e) => setInstructionsText(e.target.value)}
+                placeholder="e.g. Inspect road sub-base, compact asphalt patch, and install barricades."
+                className="w-full px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isUpdating || !selectedWorkerName}
+              className="w-full py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <ShieldCheck size={13} />
+              <span>Assign Worker &amp; Confirm Target</span>
+            </button>
+          </form>
+        </div>
+
+        {/* Worker Completion Evidence & Field Progress Notes (Visible when worker updates) */}
+        {issue.completionEvidence?.notes && (
+          <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                <CheckCircle2 size={14} className="text-emerald-600" />
+                <span>Worker Field Progress &amp; Completion Notes</span>
+              </span>
+              {issue.completionEvidence.submittedAt && (
+                <span className="text-[10px] text-emerald-700 font-medium">
+                  {new Date(issue.completionEvidence.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-emerald-800 bg-white p-3 rounded-lg border border-emerald-200/80 font-medium leading-relaxed">
+              "{issue.completionEvidence.notes}"
+            </p>
+            {issue.assignedWorkerName && (
+              <p className="text-[10px] text-emerald-700">
+                Submitted by: <strong>{issue.assignedWorkerName}</strong>
+              </p>
+            )}
           </div>
         )}
 

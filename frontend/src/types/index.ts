@@ -1,7 +1,16 @@
 // frontend/src/types/index.ts
 
 export type Category = 'Roads' | 'Garbage' | 'Water' | 'Electricity' | 'Other';
-export type Status = 'Reported' | 'Acknowledged' | 'In Progress' | 'Resolved';
+export type Status =
+  | 'Reported'
+  | 'Under Review'
+  | 'Accepted'
+  | 'Rejected'
+  | 'Assigned'
+  | 'In Progress'
+  | 'Pending Verification'
+  | 'Resolved'
+  | 'Acknowledged';
 export type Severity = 'Low' | 'Medium' | 'High' | 'Critical';
 
 export interface StatusHistoryEntry {
@@ -28,7 +37,18 @@ export interface Issue {
   status: Status;
   duplicateOf?: string | null;
   duplicateReason?: string | null;
+  assignedWorker?: string | null;
+  assignedWorkerName?: string | null;
+  assignedDepartment?: string | null;
+  deadline?: string | null;
+  internalInstructions?: string | null;
+  completionEvidence?: {
+    notes: string;
+    photos: string[];
+    submittedAt?: string | null;
+  } | null;
   statusHistory?: StatusHistoryEntry[];
+  citizenId?: string;
   createdAt: string;
   updatedAt: string;
   isDemo?: boolean; // client-side flag for sample data
@@ -65,6 +85,7 @@ export type SyncStatus =
 
 export interface OfflineReport {
   clientId: string; // client-generated UUID idempotency key
+  citizenId?: string; // unique citizen identity key for isolation
   title: string;
   description: string;
   category: Category;

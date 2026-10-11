@@ -1,5 +1,6 @@
 // frontend/src/services/offlineDb.ts
 import { OfflineReport } from '../types';
+import { getCitizenId } from './citizenSession';
 
 const DB_NAME = 'CivicLensOfflineDB';
 const DB_VERSION = 1;
@@ -49,11 +50,13 @@ function openDatabase(): Promise<IDBDatabase> {
 
 export async function saveOfflineReport(report: OfflineReport): Promise<OfflineReport> {
   const db = await openDatabase();
+  const citizenId = report.citizenId || getCitizenId();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    const updated = {
+    const updated: OfflineReport = {
       ...report,
+      citizenId,
       updatedAt: new Date().toISOString()
     };
     const req = store.put(updated);
@@ -80,7 +83,7 @@ export async function getOfflineReport(clientId: string): Promise<OfflineReport 
   });
 }
 
-export async function getAllOfflineReports(): Promise<OfflineReport[]> {
+export async function getAllOfflineReports(filterCitizenId?: string): Promise<OfflineReport[]> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
@@ -88,7 +91,11 @@ export async function getAllOfflineReports(): Promise<OfflineReport[]> {
     const req = store.getAll();
 
     req.onsuccess = () => {
-      const list: OfflineReport[] = req.result || [];
+      let list: OfflineReport[] = req.result || [];
+      if (filterCitizenId) {
+        // Enforce strict citizen privacy/isolation: only return reports for this citizen
+        list = list.filter((r) => r.citizenId === filterCitizenId);
+      }
       // Sort newest first
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       resolve(list);

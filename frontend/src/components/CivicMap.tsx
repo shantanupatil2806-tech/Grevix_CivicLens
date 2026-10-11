@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Tooltip, useMap, useMapEvents } from '
 import L from 'leaflet';
 import type { Issue, Category } from '../types';
 import { MapPin } from 'lucide-react';
+import { normalizeCategory, CATEGORY_COLORS } from '../utils/category';
 
 interface Props {
   issues: Issue[];
@@ -13,31 +14,24 @@ interface Props {
 }
 
 /**
- * Derives marker color:
- * - Resolved issues: Emerald green (#10b981)
- * - Critical priority (score >= 80): Red (#ef4444)
- * - High priority (score 60 - 79): Orange (#f97316)
- * - Moderate / Low priority (score < 60): Sky blue (#3b82f6)
+ * Derives marker color from the issue's category:
+ * - Roads / Potholes: Orange (#F97316)
+ * - Garbage / Waste: Green (#22C55E)
+ * - Water Supply / Leakage: Blue (#0EA5E9)
+ * - Streetlights / Electricity: Yellow (#EAB308)
+ * - Other: Purple (#8B5CF6)
  */
 export function getIssueMarkerColor(issue: Issue): string {
-  if (issue.status === 'Resolved') {
-    return '#10b981'; // Green for resolved issues
-  }
-  const score = issue.priorityScore ?? issue.severityScore;
-  if (score >= 80) {
-    return '#ef4444'; // Red for critical priority
-  }
-  if (score >= 60) {
-    return '#f97316'; // Orange for high priority
-  }
-  return '#3b82f6'; // Blue for moderate/low priority
+  const norm = normalizeCategory(issue.category);
+  return CATEGORY_COLORS[norm] || CATEGORY_COLORS.Other;
 }
 
 /**
  * Category-specific SVG glyphs
  */
-export function getCategoryGlyph(category: Category): string {
-  switch (category) {
+export function getCategoryGlyph(category?: string | null): string {
+  const norm = normalizeCategory(category);
+  switch (norm) {
     case 'Roads':
       // Road / pothole icon
       return `<path d="M4 19L8 5M16 5l4 14M12 7v3m0 4v3" stroke-width="2.5" stroke-linecap="round"/>`;
@@ -270,59 +264,41 @@ export default function CivicMap({
         </div>
 
         <div className="pointer-events-auto bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-xl shadow-md border border-gray-200/80 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-gray-700">
-          {/* Priority Color Legend */}
-          <div className="flex items-center gap-3 border-r border-gray-200 pr-3">
-            <span className="text-gray-400 font-semibold uppercase text-[10px] tracking-wide">Priority:</span>
-            <div className="flex items-center gap-1" title="Priority Score >= 80">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm" />
-              <span className="font-medium text-gray-700">Critical (≥80)</span>
+          {/* Category Pin Color Legend */}
+          <div className="flex items-center gap-2.5 border-r border-gray-200 pr-3">
+            <span className="text-gray-400 font-semibold uppercase text-[10px] tracking-wide">Category:</span>
+            <div className="flex items-center gap-1 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full shadow-xs" style={{ backgroundColor: '#F97316' }} />
+              <span>Roads</span>
             </div>
-            <div className="flex items-center gap-1" title="Priority Score 60 - 79">
-              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-sm" />
-              <span className="font-medium text-gray-700">High (60–79)</span>
+            <div className="flex items-center gap-1 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full shadow-xs" style={{ backgroundColor: '#22C55E' }} />
+              <span>Garbage</span>
             </div>
-            <div className="flex items-center gap-1" title="Priority Score < 60">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm" />
-              <span className="font-medium text-gray-700">Mod/Low (&lt;60)</span>
+            <div className="flex items-center gap-1 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full shadow-xs" style={{ backgroundColor: '#0EA5E9' }} />
+              <span>Water</span>
             </div>
-            <div className="flex items-center gap-1" title="Resolved Issues">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm flex items-center justify-center text-[7px] text-white">✓</span>
-              <span className="font-medium text-emerald-700">Resolved</span>
+            <div className="flex items-center gap-1 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full shadow-xs" style={{ backgroundColor: '#EAB308' }} />
+              <span>Electricity</span>
+            </div>
+            <div className="flex items-center gap-1 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full shadow-xs" style={{ backgroundColor: '#8B5CF6' }} />
+              <span>Other</span>
             </div>
           </div>
 
-          {/* Category Icon Legend */}
+          {/* Priority / Status indicator */}
           <div className="flex items-center gap-2.5">
-            <span className="text-gray-400 font-semibold uppercase text-[10px] tracking-wide">Icons:</span>
-            <div className="flex items-center gap-1 text-gray-700 font-medium">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-gray-600">
-                <path d="M4 19L8 5M16 5l4 14M12 7v3m0 4v3" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-              <span>Roads</span>
+            <span className="text-gray-400 font-semibold uppercase text-[10px] tracking-wide">Status:</span>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs flex items-center justify-center text-[7px] text-white">✓</span>
+              <span className="font-medium text-emerald-700">Resolved</span>
             </div>
-            <div className="flex items-center gap-1 text-gray-700 font-medium">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-gray-600">
-                <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span>Garbage</span>
-            </div>
-            <div className="flex items-center gap-1 text-gray-700 font-medium">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-gray-600">
-                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span>Water</span>
-            </div>
-            <div className="flex items-center gap-1 text-gray-700 font-medium">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-gray-600">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span>Electricity</span>
-            </div>
-            <div className="flex items-center gap-1 text-gray-700 font-medium">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-gray-600">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span>Other</span>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full border-2 border-red-500 bg-red-100" />
+              <span className="font-medium text-red-700">Critical (≥80)</span>
             </div>
           </div>
         </div>

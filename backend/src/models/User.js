@@ -22,6 +22,12 @@ const User = mongoose.model('User', UserSchema);
 
 async function seedDefaultUsers() {
   try {
+    // Only seed default users in development or testing environments
+    if (process.env.NODE_ENV === 'production' && process.env.SEED_DEMO_USERS !== 'true') {
+      console.log('ℹ️ Production environment detected: default test-user seeding skipped.');
+      return;
+    }
+
     const count = await User.countDocuments();
     if (count > 0) return;
 
