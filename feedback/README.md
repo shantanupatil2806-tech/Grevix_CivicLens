@@ -1,35 +1,35 @@
 # CivicLens — Challenge 2: Real-World Feedback
 
 ## Overview
-CivicLens was shared on Reddit to collect honest feedback about its usability and approach to civic issue reporting.
+
+CivicLens was shared on Reddit to gather honest feedback on its usability and approach to civic issue reporting.
 
 ## Feedback Source
+
 - **Platform:** Reddit
 - **Project Demo:** https://grevix-civic-lens-git-main-vision-x-d508.vercel.app/
 - **GitHub Repository:** https://github.com/shantanupatil2806-tech/Grevix_CivicLens
 
 ## What People Told Us
 
-The feedback highlighted two major problems:
+The feedback surfaced two major issues:
 
-1. **Duplicate Reports:** Citizens reporting the same issue create separate tickets, making it difficult for officers to identify issues affecting the most people.
-2. **Lack of Resolution Verification:** Once an officer marks an issue as resolved, citizens have no way to confirm whether the problem was actually fixed or request that it be reopened.
+1. **Duplicate reports:** When multiple citizens report the same issue separately, it becomes harder for officers to identify which problems affect the largest number of people.
+2. **Lack of resolution verification:** After an officer marks an issue as resolved, citizens currently have no clear way to confirm the repair or request that the issue be reopened if it was not actually fixed.
 
 ## Improvements Planned
 
 Based on this feedback, we plan to introduce:
 
-- **Community Support:** A “Me too” button with one vote per user and support counts to help prioritize issues.
-- **Nearby Issues and Sharing:** Help citizens discover existing reports and share issue links.
-- **Citizen-Verified Resolution:** Allow citizens to confirm repairs, rate outcomes, or request reopening with supporting photos.
-- **Before-and-After Photos:** Improve transparency by documenting the issue and its repair.
+- **Community support:** A “Me too” button with one vote per user and visible support counts to help prioritize issues.
+- **Nearby issues and sharing:** Help citizens discover existing reports and share issue links more easily.
+- **Citizen-verified resolution:** Allow citizens to confirm repairs, rate outcomes, or request reopening with supporting photos.
+- **Before-and-after photos:** Improve transparency by documenting both the issue and the repair.
 
 ## Evidence
 
-Screenshots of the Reddit post and genuine feedback are included in the `screenshots/` folder.
+Screenshots of the Reddit post and the corresponding feedback are included in the `screenshots/` folder.
 
 ## Outcome
 
-This feedback helped identify improvements focused on reducing duplicate tickets, prioritizing community needs, and making issue resolution more transparent.
-
-
+This feedback highlighted the need for a more transparent, community-driven process to reduce duplicate tickets, prioritize issues based on community impact, and verify that reported problems have actually been resolved.
