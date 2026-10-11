@@ -33,7 +33,7 @@ The project also tackles a common real-world challenge: **what happens when some
 - 🔐 **Authentication and roles:** JWT-based sign-in with citizen, officer, worker, and admin roles.
 - 📊 **Issue monitoring:** Filter and review issue records and available dashboard metrics.
 
-> **About the analysis:** CivicLens uses rule-based scoring and duplicate-suggestion logic. It is not presented as a trained machine-learning model.
+> **About the analysis:** CivicLens uses rule-based scoring and duplicate-suggestion logic to assess issues and prioritize work.
 
 ## 🔁 How It Works
 
