@@ -1,4 +1,3 @@
-::: {align="center"}
 # 🏙️ CivicLens
 
 ### Report it. Track it. Resolve it.
@@ -352,7 +351,6 @@ data, or `node_modules`.
 
 ------------------------------------------------------------------------
 
-::: {align="center"}
 **Built to make civic reporting more accessible, accountable, and
 community-driven.**
 
