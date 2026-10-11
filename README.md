@@ -1,366 +1,360 @@
-# CivicLens — AI-Assisted Civic Issue Reporting & Management
+::: {align="center"}
+# 🏙️ CivicLens
 
-CivicLens is a civic technology platform designed to make reporting, prioritizing, assigning, and resolving local infrastructure problems more accessible and transparent. It connects citizens, civic officers, and maintenance workers through a shared issue-management workflow.
+### Report it. Track it. Resolve it.
 
-Citizens can report problems such as potholes, garbage accumulation, water leakage, drainage issues, and broken streetlights. Officers can review reports, assess priority, assign maintenance work, and monitor progress, while citizens can track the status of reported issues.
+**A civic issue reporting and management platform that connects
+citizens, civic officers, and maintenance workers --- even when internet
+connectivity is unreliable.**
 
-CivicLens also addresses unreliable internet connectivity through an **offline-first reporting system** that stores pending reports on the user's device and synchronizes them when connectivity returns.
+[![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-Backend-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/Express-API-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Database-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 
-## Table of Contents
+[**🌐 Live Demo**](https://grevix-civic-lens.vercel.app/) · [**💻 GitHub
+Repository**](https://github.com/shantanupatil2806-tech/Grevix_CivicLens)
+· [**⚙️ Backend
+Health**](https://civiclens-backend-ucyz.onrender.com/health)
+:::
 
-- [Problem Statement](#problem-statement)
-- [Our Solution](#our-solution)
-- [Challenge 1: Offline-First Reporting](#challenge-1-offline-first-reporting)
-- [Key Features](#key-features)
-- [User Roles](#user-roles)
-- [Issue Workflow](#issue-workflow)
-- [Priority Assessment](#priority-assessment)
-- [Technology Stack](#technology-stack)
-- [Getting Started](#getting-started)
-- [Configuration](#configuration)
-- [Privacy and Security](#privacy-and-security)
-- [Testing](#testing)
-- [Future Scope](#future-scope)
-- [Repository](#repository)
+------------------------------------------------------------------------
 
-## Problem Statement
+## 📌 Overview
 
-Civic issues are often reported through disconnected channels, making it difficult for residents to track progress and for municipal teams to coordinate repairs. Reports may lack accurate location details, duplicate submissions can create unnecessary work, and urgent problems may be difficult to identify among less critical complaints.
+CivicLens is a full-stack civic technology application built to make
+local issue reporting more accessible, organized, and transparent.
+Residents can report problems such as potholes, overflowing garbage,
+damaged roads, drainage issues, and broken streetlights. Civic teams can
+review reports, prioritize work, assign workers, and track resolution.
 
-Traditional online reporting systems also depend on reliable internet access and may encourage users to attach photos even when their devices lack a functioning camera.
+The project also tackles a common real-world challenge: **what happens
+when someone needs to report a civic issue but has no reliable internet
+connection?** CivicLens supports offline report storage and
+synchronization when connectivity returns.
 
-These limitations can prevent people in remote locations, areas with poor connectivity, or disaster-affected regions from reporting important civic problems.
+## ✨ What You Can Do
 
-## Our Solution
+  -----------------------------------------------------------------------
+  Feature                             What it does
+  ----------------------------------- -----------------------------------
+  📝 **Civic issue reporting**        Submit an issue with a title,
+                                      description, category, location,
+                                      and optional photo.
 
-CivicLens provides a shared platform for the civic issue lifecycle:
+  🗺️ **Interactive issue map**        Explore reported issues
+                                      geographically using Leaflet and
+                                      OpenStreetMap.
 
-- Citizens submit reports with descriptions, categories, locations, and optional photos.
-- A rule-based priority assessment helps officers identify issues that may require urgent attention.
-- Officers review reports, manage priorities, and assign maintenance workers.
-- Workers update task progress and submit notes or supporting evidence.
-- Officers verify completed work before resolving issues.
-- Citizens can track report status through the platform.
-- Offline reporting allows citizens to prepare and save reports when internet connectivity is unavailable.
+  📴 **Offline-first reporting**      Save reports locally in IndexedDB
+                                      when they cannot be submitted
+                                      online.
 
-## Challenge 1: Offline-First Reporting
+  🔄 **Automatic synchronization**    Retry pending reports when
+                                      connectivity returns, with stable
+                                      client IDs to help prevent
+                                      duplicate records on retries.
 
-### The Challenge
+  👥 **Community support**            Support an existing issue instead
+                                      of creating another ticket for the
+                                      same problem.
 
-The original reporting workflow depended on internet connectivity to submit civic issues. In remote areas, during natural disasters, or in locations with unreliable infrastructure, citizens may be unable to send reports. A broken or unavailable camera can also prevent users from providing photographic evidence.
+  🧠 **Rule-based issue analysis**    Assess severity and priority using
+                                      configured rules, and surface
+                                      potential duplicate reports for
+                                      review.
 
-The goal was to redesign CivicLens so users could report issues offline while minimizing data loss, duplicate submissions, and problems caused by outdated reports when connectivity returns.
+  🧑‍💼 **Officer workflow**             Review reports, manage status and
+                                      priority, assign work, and verify
+                                      completion.
 
-### Our Solution
+  🦺 **Worker workflow**              View assigned tasks, provide
+                                      progress updates, and submit
+                                      completion evidence where
+                                      supported.
 
-CivicLens uses an offline-first reporting workflow that stores pending reports locally on the device and synchronizes them with the backend when connectivity is restored.
+  🔐 **Authentication and roles**     JWT-based sign-in with citizen,
+                                      officer, worker, and admin roles.
 
-### Key Capabilities
+  📊 **Issue monitoring**             Filter and review issue records and
+                                      available dashboard metrics.
+  -----------------------------------------------------------------------
 
-- **Offline report creation:** Citizens can prepare and save issue reports without an active internet connection.
-- **Local persistence:** IndexedDB stores pending reports on the device so they can remain available after a page refresh.
-- **Camera-independent reporting:** Photos are optional, allowing users to submit reports even when a camera is unavailable.
-- **Connectivity awareness:** The application checks connectivity and distinguishes pending reports from synchronized reports.
-- **Automatic and manual synchronization:** Pending reports can be synchronized when connectivity returns, with manual synchronization available where implemented.
-- **Duplicate prevention:** Stable client-side identifiers and idempotent backend handling help prevent duplicate records when synchronization is retried.
-- **Existing online workflow preserved:** Users with stable connectivity can continue using the regular reporting process.
-- **Service-worker support:** The application can cache the configured application shell to improve access during connectivity interruptions, depending on the build and deployment configuration.
+> **About the analysis:** CivicLens uses rule-based scoring and
+> duplicate-suggestion logic. It is not presented as a trained
+> machine-learning model.
 
-### Offline Reporting Workflow
+## 🔁 How It Works
 
-`Create Report → Save to IndexedDB → Wait for Connectivity → Synchronize with Backend → Confirm Submission`
+``` text
+Citizen reports an issue
+          │
+          ▼
+CivicLens checks the report and assesses priority
+          │
+          ▼
+Issue is stored and shown in the issue workflow/map
+          │
+          ▼
+Officer reviews the report and assigns work
+          │
+          ▼
+Worker updates progress and submits evidence
+          │
+          ▼
+Officer verifies the work
+          │
+          ▼
+Issue is marked resolved
+```
 
-1. A citizen fills out an issue report.
-2. If the report cannot be submitted online, it is stored in the local pending queue.
-3. The report remains available locally while synchronization is pending.
-4. When connectivity returns, the synchronization process sends the report to the backend.
-5. The backend uses the stable client identifier to handle retries safely and reduce duplicate creation.
-6. After successful synchronization, the local queue is updated to reflect the result.
+### Offline reporting flow
 
-### Handling Duplicate and Outdated Reports
+``` text
+Create report
+     ↓
+Save locally in IndexedDB
+     ↓
+Wait for internet connectivity
+     ↓
+Synchronize with the backend
+     ↓
+Mark report as synced
+```
 
-Offline reports may be submitted long after they were created, and synchronization can be retried if a network request fails.
+Pending reports can remain on the device across page refreshes. Reports
+older than the configured threshold may be flagged for review before
+synchronization, helping users confirm that the issue still exists.
 
-CivicLens addresses these risks through:
+## 🧭 User Roles
 
-- Stable client identifiers for locally created reports.
-- Idempotent backend handling to reduce duplicate creation during retries.
-- Local queue state to distinguish pending reports from successfully synchronized reports.
-- Timestamps and report details that can help identify older submissions.
+-   **Citizen** --- Submit and track civic reports, explore issues, and
+    support existing reports.
+-   **Civic Officer** --- Review issues, assess or adjust priority,
+    assign workers, and verify resolutions.
+-   **Maintenance Worker** --- View assigned tasks, record progress, and
+    submit work evidence.
+-   **Admin** --- Manage authorized user accounts and access
+    administrative functions.
 
-A stable identifier prevents repeated synchronization of the same report from creating duplicate records when the backend correctly enforces idempotency. It does not automatically detect separate reports describing the same real-world problem. Duplicate-issue detection across different reports remains a separate concern.
+Access should always be enforced by backend authorization, not just by
+hiding interface elements.
 
-### Demonstration Scenarios
+## 🛠️ Tech Stack
 
-The following scenarios can be used to demonstrate the Challenge 1 implementation:
+### Frontend
 
-1. Submit a report while online and verify that it appears in the backend.
-2. Disconnect the internet and create a new report.
-3. Verify that the report appears in the local pending queue.
-4. Refresh the application while offline and verify that the report remains available.
-5. Restore connectivity and synchronize the queued report.
-6. Verify that the backend contains exactly one record for the synchronized report.
-7. Retry synchronization and verify that the same report is not created again.
-8. Submit a report without a photo to demonstrate camera-independent reporting.
-9. Verify that ordinary online reporting continues to work.
+-   React
+-   TypeScript
+-   Vite
+-   Tailwind CSS
+-   Leaflet and React Leaflet
+-   Axios
+-   IndexedDB for local offline report storage
 
-These are validation scenarios, not claims that every scenario has been independently verified in every browser or deployment environment.
+### Backend
 
-## Key Features
+-   Node.js
+-   Express
+-   MongoDB and Mongoose
+-   JWT authentication
+-   bcryptjs password hashing
+-   Multer for photo uploads
+-   Helmet and CORS middleware
 
-### Citizen Portal
+### Deployment
 
-- Report civic issues with titles, descriptions, categories, and optional photos.
-- Select locations using an interactive map.
-- Search for locations where geocoding is configured.
-- View public issue markers and their statuses.
-- Track reports using exact tracking information.
-- Save reports offline and view pending submissions.
-- Synchronize queued reports when connectivity returns.
+-   **Frontend:** Vercel
+-   **Backend:** Render
+-   **Database:** MongoDB (configure a local instance or MongoDB Atlas)
 
-### Civic Officer Dashboard
+## 🌐 Live Deployment
 
-- View and filter civic issue reports.
-- Review issue details, locations, and supporting evidence.
-- Assess priority using rule-based scoring.
-- Assign issues to maintenance workers.
-- Monitor issue status and work progress.
-- Verify completion evidence before resolving a report.
-- View available issue metrics.
-- Distinguish live backend data from demo fallback data when that fallback is enabled.
+-   **Frontend:** https://grevix-civic-lens.vercel.app/
+-   **Backend health endpoint:**
+    https://civiclens-backend-ucyz.onrender.com/health
+-   **Backend API base:**
+    `https://civiclens-backend-ucyz.onrender.com/api`
 
-### Maintenance Worker Portal
+The health endpoint checks whether the backend is responding. It does
+not by itself guarantee that every feature or login account is
+configured correctly.
 
-- View assigned civic issues.
-- Access issue descriptions, locations, and task details.
-- Update task progress and add work notes.
-- Submit supporting evidence where uploads are supported.
-- Send completed work for officer verification.
-
-### Interactive Issue Map
-
-- Display civic issues geographically using Leaflet and OpenStreetMap.
-- Show issue locations and categories.
-- Allow users to explore reported problems.
-- Support category and status filtering where implemented.
-
-### Shared Issue Management
-
-- Connect citizen reports, officer actions, and worker updates through backend records.
-- Track issue progress through the configured status workflow.
-- Restrict private reporter information and internal notes to authorized users.
-
-## User Roles
-
-| Role                   | Responsibilities                                                      |
-| ---------------------- | --------------------------------------------------------------------- |
-| **Citizen**            | Submit reports, view public issues, and track reports.                |
-| **Civic Officer**      | Review reports, assess priority, assign work, and verify resolutions. |
-| **Maintenance Worker** | View assigned tasks, record progress, and submit repair evidence.     |
-
-Role-based restrictions must be enforced by the backend, not only by hiding interface controls.
-
-## Issue Workflow
-
-A typical issue follows this workflow:
-
-1. **Reported** — A citizen submits a civic issue.
-2. **Under Review** — An officer reviews the report.
-3. **Accepted or Rejected** — The officer decides whether the report should proceed.
-4. **Assigned** — An accepted issue is assigned to a worker or department.
-5. **In Progress** — The worker begins the required work.
-6. **Pending Verification** — The worker submits an update and, where applicable, completion evidence.
-7. **Resolved** — An officer verifies the work and closes the issue.
-
-The exact status names depend on the backend's configured status definitions.
-
-## Priority Assessment
-
-CivicLens uses a rule-based priority assessment to help officers identify civic issues that may need earlier attention.
-
-Depending on the configured rules, assessment factors may include:
-
-- Issue severity.
-- Potential safety impact.
-- Disruption to pedestrians or traffic.
-- Impact on essential services.
-- Other issue-specific factors supported by the implementation.
-
-A score can support decision-making, but it should not replace officer review.
-
-**Transparency note:** The current priority assessment should be described as rule-based AI-assisted scoring if it relies on predefined rules and weighted conditions. It should not be presented as a trained machine-learning model unless such a model is actually implemented.
-
-## Technology Stack
-
-| Component                   | Technology                               |
-| --------------------------- | ---------------------------------------- |
-| Frontend                    | React, TypeScript, Vite                  |
-| Styling                     | Tailwind CSS                             |
-| Backend                     | Node.js, Express.js                      |
-| Database                    | MongoDB                                  |
-| Mapping                     | Leaflet, OpenStreetMap                   |
-| Authentication              | JWT-based authentication                 |
-| Offline storage             | IndexedDB                                |
-| Offline application support | Service worker and synchronization logic |
-| API communication           | REST APIs                                |
-
-## Getting Started
+## 🚀 Run Locally
 
 ### Prerequisites
 
-Install the following tools:
+Install: - [Node.js](https://nodejs.org/) and npm -
+[Git](https://git-scm.com/) - MongoDB locally or a MongoDB Atlas
+connection string
 
-- Node.js and npm.
-- MongoDB locally or through MongoDB Atlas.
-- Git.
+### 1. Clone the repository
 
-### 1. Clone the Repository
-
-```bash
+``` bash
 git clone https://github.com/shantanupatil2806-tech/Grevix_CivicLens.git
 cd Grevix_CivicLens
 ```
 
-### 2. Install Backend Dependencies
+### 2. Configure and start the backend
 
-```bash
+``` bash
 cd backend
 npm install
 ```
 
-### 3. Configure the Backend
+Create a `.env` file inside `backend/`:
 
-Create a `backend/.env` file using the environment variable names expected by the backend.
-
-Example:
-
-```env
+``` env
 PORT=5000
 MONGODB_URI=mongodb://127.0.0.1:27017/civiclens
-JWT_SECRET=replace_with_a_strong_random_secret
+JWT_SECRET=replace_with_a_long_random_secret
 SEED_DEMO_USERS=false
 ```
 
-These values are examples. Confirm the port, environment variable names, and demo-user seeding behavior against the actual source code.
+Then start the backend:
 
-Never commit real credentials, database passwords, or JWT secrets to GitHub.
-
-### 4. Install Frontend Dependencies
-
-Open a second terminal from the repository root:
-
-```bash
-cd frontend
-npm install
-```
-
-### 5. Configure the Frontend
-
-If the frontend uses a configurable API base URL, create `frontend/.env` and set the variable expected by the application.
-
-For example, if the code reads `VITE_API_URL`:
-
-```env
-VITE_API_URL=http://localhost:5000/api
-```
-
-Use the actual API base URL expected by your frontend. Do not add environment variables that the application does not read.
-
-### 6. Start MongoDB
-
-Ensure MongoDB is running locally or that the configured hosted database is accessible.
-
-### 7. Start the Backend
-
-From the `backend` directory, use the start command configured in `package.json`.
-
-If the project uses `src/index.js` directly, run:
-
-```bash
-node src/index.js
-```
-
-### 8. Start the Frontend
-
-From the `frontend` directory:
-
-```bash
+``` bash
 npm run dev
 ```
 
-Open the local URL displayed by Vite in your terminal.
+The API will normally be available at `http://localhost:5000`, and the
+health endpoint at `http://localhost:5000/health`.
 
-## Configuration
+**Environment notes** - `MONGODB_URI` must point to the database you
+intend to use. - Set `JWT_SECRET` to a strong, private value. Never
+commit it. - In production, default demo-user seeding is skipped unless
+`SEED_DEMO_USERS=true`. Do not enable demo seeding on a public
+deployment with predictable credentials. Prefer creating accounts
+securely and using unique passwords. - Uploaded files are stored in the
+configured upload directory. Production deployments should use
+persistent or external file storage if uploaded files must survive
+instance replacement.
 
-Before running or demonstrating CivicLens, verify:
+### 3. Configure and start the frontend
 
-- The backend connects successfully to MongoDB.
-- The frontend points to the correct API URL.
-- Authentication and role permissions work as expected.
-- Map tiles load and OpenStreetMap attribution is visible.
-- Geocoding is configured if location search is enabled.
-- Photo uploads use the configured storage path.
-- Offline storage and synchronization behave correctly in the target browser.
-- Service-worker registration matches the development or production build configuration.
+Open a second terminal from the repository root:
 
-## Privacy and Security
-
-- Keep database credentials and JWT secrets out of source control.
-- Protect private reporter contact information.
-- Restrict internal officer notes to authorized users.
-- Validate submitted fields, coordinates, and uploaded files.
-- Enforce authentication and role-based authorization on the backend.
-- Restrict workers to tasks they are authorized to access.
-- Avoid storing unnecessary personal information in offline reports.
-- Test synchronization behavior when requests fail or are retried.
-
-Offline data stored in the browser may remain on the device until removed. Users should be informed of relevant local data retention behavior, particularly on shared devices.
-
-## Testing
-
-Before a demonstration or deployment, verify the following:
-
-- [x] Online report creation.
-- [x] Offline report creation.
-- [x] Pending report persistence after a page refresh.
-- [x] Successful synchronization after connectivity returns.
-- [x] No duplicate server records after synchronization retries.
-- [x] Report submission without a photo.
-- [x] Correct report tracking.
-- [x] Officer assignment and worker task updates.
-- [x] Officer verification and issue resolution.
-- [x] Photo upload and retrieval.
-- [x] Correct map markers and category labels.
-- [x] Clear distinction between live backend data and demo data.
-- [x] Service-worker behavior in the intended deployment environment.
-
-Run the checks configured in `package.json`. For example, if the frontend defines these scripts:
-
-```bash
-npm run lint
-npm run build
+``` bash
+cd frontend
+npm install
+npm run dev
 ```
 
-## Future Scope
+Open the local URL printed by Vite.
 
-Potential future improvements include:
+The current frontend API client is configured to use the deployed
+CivicLens API URL. For a fully local setup, update the API base URL in
+`frontend/src/services/api.ts` to:
 
-- Better duplicate detection across separate reports.
-- Conflict handling for reports that become outdated while offline.
-- Image-assisted civic issue classification.
-- Notifications when issue statuses change.
-- Geographic analytics and issue hotspots.
-- Multilingual reporting and accessibility improvements.
-- More detailed reporting and resolution analytics.
+``` ts
+const BASE_URL = 'http://localhost:5000/api';
+```
 
-## Challenge 2
+If you switch between local and deployed environments often, consider
+moving this value into a Vite environment variable.
 
-*The Challenge 2 problem statement and implementation details will be added here when the next challenge is announced.*
+### 4. Build the frontend
 
-## Repository
+From `frontend/`:
 
-**GitHub:** [Grevix CivicLens](https://github.com/shantanupatil2806-tech/Grevix_CivicLens)
+``` bash
+npm run build
+npm run lint
+```
 
----
+## 🔌 API Overview
 
-**CivicLens — Making civic issue reporting and resolution more accessible, transparent, and organized.**
+The backend exposes these main route groups:
+
+  -----------------------------------------------------------------------
+  Route                               Purpose
+  ----------------------------------- -----------------------------------
+  `GET /health`                       Backend health check
+
+  `/api/auth`                         Login, current-user information,
+                                      password flows, demo-user listing,
+                                      and user administration routes
+
+  `/api/issues`                       Issue reporting, listing, analysis,
+                                      status updates, assignments, worker
+                                      updates, community support, and
+                                      resolution workflows
+  -----------------------------------------------------------------------
+
+Example health check:
+
+``` bash
+curl https://civiclens-backend-ucyz.onrender.com/health
+```
+
+Expected response:
+
+``` json
+{
+  "status": "ok"
+}
+```
+
+## 🔒 Security & Privacy
+
+-   Keep `.env` files, database credentials, and JWT secrets out of Git.
+-   Use unique passwords and avoid public demo accounts with privileged
+    access.
+-   Validate and authorize sensitive operations on the backend.
+-   Protect reporter contact information and internal work notes.
+-   Review upload validation and storage settings before production use.
+-   Remember that offline reports are stored in the browser on the
+    current device; avoid using sensitive information on shared devices.
+-   Test account creation, login, role permissions, and logout in the
+    deployed environment.
+
+## 🧪 Suggested Test Checklist
+
+Use this checklist when validating a local or deployed build:
+
+-   [ ] Backend health endpoint responds successfully.
+-   [ ] A valid account can sign in and an invalid password is rejected.
+-   [ ] A citizen can submit an issue with and without a photo.
+-   [ ] Issue details and map locations display correctly.
+-   [ ] A report created offline remains in the pending queue after
+    refresh.
+-   [ ] Pending reports synchronize after connectivity returns.
+-   [ ] Retrying synchronization does not create duplicate records for
+    the same client ID.
+-   [ ] Supporting an existing issue updates its support count as
+    expected.
+-   [ ] Officers can assign work and workers can submit progress
+    updates.
+-   [ ] Resolution follows the configured verification workflow.
+-   [ ] The frontend production build completes successfully.
+
+## 🗺️ Future Improvements
+
+Potential next steps include: - Stronger detection of separate reports
+describing the same real-world issue. - Notifications when reports are
+assigned or resolved. - Multilingual and accessibility improvements. -
+Better analytics for recurring civic problems and issue hotspots. - More
+robust conflict handling for old offline reports. - External file
+storage for durable production photo uploads.
+
+## 🤝 Contributing
+
+Contributions, bug reports, and practical suggestions are welcome.
+
+1.  Fork the repository.
+2.  Create a feature branch: `git checkout -b feature/your-feature`
+3.  Commit your changes.
+4.  Push the branch and open a pull request.
+
+Please avoid committing secrets, local database files, uploaded user
+data, or `node_modules`.
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+**Built to make civic reporting more accessible, accountable, and
+community-driven.**
+
+### 🏙️ CivicLens --- See the issue. Support the solution.
+:::
