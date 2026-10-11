@@ -16,7 +16,6 @@ connectivity is unreliable.**
 Repository**](https://github.com/shantanupatil2806-tech/Grevix_CivicLens)
 · [**⚙️ Backend
 Health**](https://civiclens-backend-ucyz.onrender.com/health)
-:::
 
 ------------------------------------------------------------------------
 ## 📌 Overview
